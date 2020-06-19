@@ -104,14 +104,19 @@ term_draw_rows(struct ab* ab, long width, long height)
 }
 
 static bool
-term_screen_refresh(int output_fd, long width, long height)
+term_screen_refresh(int output_fd, long width, long height, long cx, long cy)
 {
     struct ab ab = { 0 };
 
     ab_append(&ab, "\x1b[?25l", 6);
     ab_append(&ab, "\x1b[H", 3);
+
     term_draw_rows(&ab, width, height);
-    ab_append(&ab, "\x1b[H", 3);
+
+    char buf[80] = { 0 };
+    snprintf(buf, sizeof(buf), "\x1b[%ld;%ldH", cy + 1, cx + 1);
+    ab_append(&ab, buf, strlen(buf));
+
     ab_append(&ab, "\x1b[?25h", 6);
 
     if (write(output_fd, ab.buf, ab.size) != ab.size) {
@@ -143,6 +148,9 @@ term_cursor_pos(int input_fd, int output_fd, long* x, long* y)
     if (buf[0] != '\x1b' || buf[1] != '[') return false;
     if (sscanf(&buf[2], "%ld;%ld", y, x) != 2) return false;
 
+    *x -= 1;
+    *y -= 1;
+
     return true;
 }
 
@@ -172,8 +180,8 @@ main(int argc, char* argv[])
     int output_fd = STDOUT_FILENO;
     long width = 0;
     long height = 0;
-    long cursor_x = 0;
-    long cursor_y = 0;
+    long cx = 10;
+    long cy = 10;
 
     if (!term_size(input_fd, output_fd, &width, &height)) {
         fprintf(stderr, "error getting term size: %s\n", strerror(errno));
@@ -191,7 +199,7 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    if (!term_screen_refresh(output_fd, width, height)) {
+    if (!term_screen_refresh(output_fd, width, height, cx, cy)) {
         fprintf(stderr, "error refreshing screen\n");
         tcsetattr(input_fd, TCSAFLUSH, &default_termios);
         return EXIT_FAILURE;
