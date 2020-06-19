@@ -14,6 +14,18 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
+enum key {
+    KEY_ARROW_LEFT = 1000,
+    KEY_ARROW_RIGHT,
+    KEY_ARROW_UP,
+    KEY_ARROW_DOWN,
+    KEY_PAGE_UP,
+    KEY_PAGE_DOWN,
+    KEY_HOME,
+    KEY_END,
+    KEY_DEL,
+};
+
 struct ab {
     char* buf;
     long size;
@@ -59,8 +71,9 @@ term_raw_mode(int input_fd)
     return true;
 }
 
+// TODO: make all chars an enum?
 static bool
-term_read_key(int input_fd, char* c)
+term_read_key(int input_fd, int* c)
 {
     if (c == NULL) return false;
 
@@ -68,6 +81,46 @@ term_read_key(int input_fd, char* c)
     while ((n = read(input_fd, c, 1)) != 1) {
         if (n == -1 && errno != EAGAIN) {
             return false;
+        }
+    }
+
+    // check for extra data beyond the escape, else just
+    // return the lone escape char. TODO: clean this up?
+    if (*c == '\x1b') {
+        char seq[3] = { 0 };
+        if (read(input_fd, &seq[0], 1) != 1) return true;
+        if (read(input_fd, &seq[1], 1) != 1) return true;
+        if (seq[0] == '[') {
+            if (seq[1] >= '0' && seq[1] <= '9') {
+                // clean page up / down keys
+                if (read(input_fd, &seq[2], 1) != 1) return true;
+                if (seq[2] == '~') {
+                    switch (seq[1]) {
+                        case '1': *c = KEY_HOME; return true;
+                        case '3': *c = KEY_DEL; return true;
+                        case '4': *c = KEY_END; return true;
+                        case '5': *c = KEY_PAGE_UP; return true;
+                        case '6': *c = KEY_PAGE_DOWN; return true;
+                        case '7': *c = KEY_HOME; return true;
+                        case '8': *c = KEY_END; return true;
+                    }
+                }
+            } else {
+                // clean arrow keys
+                switch (seq[1]) {
+                    case 'A': *c = KEY_ARROW_UP; return true;
+                    case 'B': *c = KEY_ARROW_DOWN; return true;
+                    case 'C': *c = KEY_ARROW_RIGHT; return true;
+                    case 'D': *c = KEY_ARROW_LEFT; return true;
+                    case 'H': *c = KEY_HOME; return true;
+                    case 'F': *c = KEY_END; return true;
+                }
+            }
+        } else if (seq[0] == 'O') {
+            switch (seq[1]) {
+                case 'H': *c = KEY_HOME; return true;
+                case 'F': *c = KEY_END; return true;
+            }
         }
     }
 
@@ -199,38 +252,53 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    if (!term_screen_refresh(output_fd, width, height, cx, cy)) {
-        fprintf(stderr, "error refreshing screen\n");
-        tcsetattr(input_fd, TCSAFLUSH, &default_termios);
-        return EXIT_FAILURE;
-    }
-
-//    printf("size: %ld, %ld\r\n", width, height);
-//    if (term_cursor_pos(input_fd, output_fd, &cursor_x, &cursor_y)) {
-//        printf("cursor: %ld, %ld\r\n", cursor_x, cursor_y);
-//    }
-
-    term_read_key(input_fd, NULL);
-
     bool running = true;
     while (running) {
-        char c = '\0';
+        if (!term_screen_refresh(output_fd, width, height, cx, cy)) {
+            fprintf(stderr, "error refreshing screen\n");
+            tcsetattr(input_fd, TCSAFLUSH, &default_termios);
+            return EXIT_FAILURE;
+        }
+
+        // ??? enum key c = 0 ???
+        int c = 0;
         if (!term_read_key(input_fd, &c)) {
             fprintf(stderr, "error reading key: %s\n", strerror(errno));
             tcsetattr(input_fd, TCSAFLUSH, &default_termios);
             return EXIT_FAILURE;
         }
 
+        // what does a given key[combo] do in a given mode?
+        // typedef some sort of handler func and make a nice table
+        //   for each mode?
         switch (c) {
-        case CTRL_KEY('q'):
-            running = false;
-            break;
-//        default:
-//            if (iscntrl(c)) {
-//                printf("%d\r\n", c);
-//            } else {
-//                printf("%d ('%c')\r\n", c, c);
-//            }
+            case CTRL_KEY('q'):
+                running = false;
+                break;
+            case KEY_ARROW_LEFT:
+                if (cx > 0) cx--;
+                break;
+            case KEY_ARROW_RIGHT:
+                if (cx < width - 1) cx++;
+                break;
+            case KEY_ARROW_UP:
+                if (cy > 0) cy--;
+                break;
+            case KEY_ARROW_DOWN:
+                if (cy < height - 1) cy++;
+                break;
+            case KEY_PAGE_UP:
+                cy = 0;
+                break;
+            case KEY_PAGE_DOWN:
+                cy = height - 1;
+                break;
+            case KEY_HOME:
+                cx = 0;
+                break;
+            case KEY_END:
+                cx = width - 1;
+                break;
         }
     }
 
