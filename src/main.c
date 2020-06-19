@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,18 +13,11 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
-struct derzvim {
-    int input_fd;
-    int output_fd;
-    long width;
-    long height;
-};
-
 static bool
-term_raw_mode(const struct derzvim* dv)
+term_raw_mode(int fd)
 {
     struct termios raw;
-    if (tcgetattr(dv->input_fd, &raw) == -1) return false;
+    if (tcgetattr(fd, &raw) == -1) return false;
 
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
@@ -32,15 +26,15 @@ term_raw_mode(const struct derzvim* dv)
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
 
-    if (tcsetattr(dv->input_fd, TCSAFLUSH, &raw) == -1) return false;
+    if (tcsetattr(fd, TCSAFLUSH, &raw) == -1) return false;
     return true;
 }
 
 static bool
-term_read_key(const struct derzvim* dv, char* c)
+term_read_key(int fd, char* c)
 {
     long n = 0;
-    while ((n = read(dv->input_fd, c, 1)) != 1) {
+    while ((n = read(fd, c, 1)) != 1) {
         if (n == -1 && errno != EAGAIN) {
             return false;
         }
@@ -50,78 +44,87 @@ term_read_key(const struct derzvim* dv, char* c)
 }
 
 static bool
-term_draw_rows(const struct derzvim* dv)
+term_draw_rows(int fd, long width, long height)
 {
-    for (long y = 0; y < dv->height; y++) {
-        if (write(dv->output_fd, "~\r\n", 3) != 3) return false;
+    for (long y = 0; y < height; y++) {
+        if (write(fd, "~\r\n", 3) != 3) return false;
     }
-    if (write(dv->output_fd, "~", 1) != 1) return false;
+    if (write(fd, "~", 1) != 1) return false;
 
     return true;
 }
 
 static bool
-term_screen_refresh(const struct derzvim* dv)
+term_screen_refresh(int fd, long width, long height)
 {
-    if (write(dv->output_fd, "\x1b[2J", 4) != 4) return false;
-    if (write(dv->output_fd, "\x1b[H", 3) != 3) return false;
+    if (write(fd, "\x1b[2J", 4) != 4) return false;
+    if (write(fd, "\x1b[H", 3) != 3) return false;
 
-    if (!term_draw_rows(dv)) return false;
+    if (!term_draw_rows(fd, width, height)) return false;
 
-    if (write(dv->output_fd, "\x1b[H", 3) != 3) return false;
+    if (write(fd, "\x1b[H", 3) != 3) return false;
 
     return true;
 }
 
 static bool
-term_size(struct derzvim* dv)
+term_size(int fd, long* width, long* height)
 {
     struct winsize ws;
-    if (ioctl(dv->output_fd, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    if (ioctl(fd, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
         return false;
     }
 
-    dv->width = ws.ws_col;
-    dv->height = ws.ws_row;
+    *width = ws.ws_col;
+    *height = ws.ws_row;
 
     return true;
+}
+
+void
+handle_sigwinch(int signal)
+{
+    printf("caught SIGWINCH!\n");
 }
 
 int
 main(int argc, char* argv[])
 {
-    struct derzvim dv = {
-        .input_fd = STDIN_FILENO,
-        .output_fd = STDOUT_FILENO,
-    };
-    if (!term_size(&dv)) {
+//    signal(SIGWINCH, handle_sigwinch);
+
+    int input_fd = STDIN_FILENO;
+    int output_fd = STDOUT_FILENO;
+    long width = 0;
+    long height = 0;
+
+    if (!term_size(output_fd, &width, &height)) {
         fprintf(stderr, "error getting term size: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
     struct termios default_termios;
-    if(tcgetattr(dv.input_fd, &default_termios) == -1) {
+    if(tcgetattr(input_fd, &default_termios) == -1) {
         fprintf(stderr, "error capturing default termios: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
-    if (!term_raw_mode(&dv)) {
+    if (!term_raw_mode(input_fd)) {
         fprintf(stderr, "error enabling raw mode: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
-    if (!term_screen_refresh(&dv)) {
+    if (!term_screen_refresh(output_fd, width, height)) {
         fprintf(stderr, "error refreshing screen\n");
-        tcsetattr(dv.input_fd, TCSAFLUSH, &default_termios);
+        tcsetattr(input_fd, TCSAFLUSH, &default_termios);
         return EXIT_FAILURE;
     }
 
     bool running = true;
     while (running) {
         char c = '\0';
-        if (!term_read_key(&dv, &c)) {
+        if (!term_read_key(input_fd, &c)) {
             fprintf(stderr, "error reading key: %s\n", strerror(errno));
-            tcsetattr(dv.input_fd, TCSAFLUSH, &default_termios);
+            tcsetattr(input_fd, TCSAFLUSH, &default_termios);
             return EXIT_FAILURE;
         }
 
@@ -138,8 +141,8 @@ main(int argc, char* argv[])
         }
     }
 
-    assert(write(dv.output_fd, "\x1b[2J", 4) == 4);
-    assert(write(dv.output_fd, "\x1b[H", 3) == 3);
-    tcsetattr(dv.input_fd, TCSAFLUSH, &default_termios);
+    assert(write(output_fd, "\x1b[2J", 4) == 4);
+    assert(write(output_fd, "\x1b[H", 3) == 3);
+    tcsetattr(input_fd, TCSAFLUSH, &default_termios);
     return EXIT_SUCCESS;
 }
