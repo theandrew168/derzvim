@@ -10,6 +10,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "ab.h"
+
 #define DERZVIM_VERSION "0.0.1"
 
 #define CTRL_KEY(k) ((k) & 0x1f)
@@ -25,34 +27,6 @@ enum key {
     KEY_END,
     KEY_DEL,
 };
-
-struct ab {
-    char* buf;
-    long size;
-};
-
-static bool
-ab_append(struct ab* ab, const char* s, long size)
-{
-    // alloc a new buffer that is big enough to hold everything
-    char* buf = realloc(ab->buf, ab->size + size);
-    if (buf == NULL) return false;
-
-    // append the new contents onto the new buffer
-    memmove(&buf[ab->size], s, size);
-
-    // update the struct ab with the new buffer and size
-    ab->buf = buf;
-    ab->size += size;
-
-    return true;
-}
-
-static void
-ab_free(struct ab* ab)
-{
-    free(ab->buf);
-}
 
 static bool
 term_raw_mode(int input_fd)
@@ -235,6 +209,7 @@ main(int argc, char* argv[])
     long height = 0;
     long cx = 10;
     long cy = 10;
+    long rows = 0;
 
     if (!term_size(input_fd, output_fd, &width, &height)) {
         fprintf(stderr, "error getting term size: %s\n", strerror(errno));
