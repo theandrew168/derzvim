@@ -182,15 +182,10 @@ term_cursor_pos(int input_fd, int output_fd, long* x, long* y)
 }
 
 static bool
-term_size(int input_fd, int output_fd, long* width, long* height)
+term_size(int output_fd, long* width, long* height)
 {
-    // attempt ioctl "easy" method first but fallback to moving the cursor
-    // to the bottom-right of the screen and reading its position
-
     struct winsize ws;
     if (ioctl(output_fd, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-//        if (write(output_fd, "\x1b[999C\x1b[999B", 12) != 12) return false;
-//        return term_cursor_pos(input_fd, output_fd, width, height);
         return false;
     }
 
@@ -209,16 +204,15 @@ main(int argc, char* argv[])
     long height = 0;
     long cx = 10;
     long cy = 10;
-    long rows = 0;
-
-    if (!term_size(input_fd, output_fd, &width, &height)) {
-        fprintf(stderr, "error getting term size: %s\n", strerror(errno));
-        return EXIT_FAILURE;
-    }
 
     struct termios default_termios;
     if (tcgetattr(input_fd, &default_termios) == -1) {
         fprintf(stderr, "error capturing default termios: %s\n", strerror(errno));
+        return EXIT_FAILURE;
+    }
+
+    if (!term_size(output_fd, &width, &height)) {
+        fprintf(stderr, "error getting term size: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
