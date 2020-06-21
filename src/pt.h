@@ -36,7 +36,7 @@ int pt_init(struct pt* pt, const char* orig, long size);
 long pt_size(const struct pt* pt);
 int pt_get(const struct pt* pt, long index, char* c);
 //int pt_get_seq(const struct pt* pt, long start, long end, char* buf, long size);
-//int pt_insert(struct pt* pt, long index, char c);
+int pt_insert(struct pt* pt, long index, char c);
 //int pt_delete(struct pt* pt, long index);
 void pt_free(struct pt* pt);
 

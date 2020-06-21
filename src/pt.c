@@ -43,11 +43,24 @@ pt_get(const struct pt* pt, long index, char* c)
 {
     assert(pt != NULL);
 
+    long offset = 0;
     for (long i = 0; i < pt->entry_count; i++) {
-        
+        struct pt_entry entry = pt->entries[i];
+
+        if (index < offset + entry.size) {
+            if (entry.file == PT_FILE_ORIG) {
+                *c = pt->orig_buf[entry.start + (index - offset)];
+                return PT_OK;
+            } else if (entry.file == PT_FILE_ADD) {
+                *c = pt->add_buf.buf[entry.start + (index - offset)];
+                return PT_OK;
+            }
+        }
+
+        offset += entry.size;
     }
 
-    return PT_OK;
+    return PT_EOF;
 }
 
 //int
@@ -62,12 +75,12 @@ pt_get(const struct pt* pt, long index, char* c)
 //    return PT_OK;
 //}
 
-//int
-//pt_insert(struct pt* pt, long index, char c)
-//{
-//    assert(pt != NULL);
-//    return PT_OK;
-//}
+int
+pt_insert(struct pt* pt, long index, char c)
+{
+    assert(pt != NULL);
+    return PT_OK;
+}
 
 //int
 //pt_delete(struct pt* pt, long index)
