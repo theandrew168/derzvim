@@ -205,38 +205,53 @@ pt_delete(struct pt* pt, long index)
         return PT_ERROR_OUT_OF_BOUNDS;
     }
 
-    // default entry is the last one
-    struct pt_entry* target = &pt->entries[pt->entry_count - 1];
-
-    // determine which piece table entry this delete affects
-    long offset = 0;
     long entry_index = 0;
-    for (long i = 0; i < pt->entry_count; i++) {
-        if (index < offset + pt->entries[i].size) {
-            target = &pt->entries[i];
-            break;
-        };
-
-        offset += pt->entries[i].size;
-        entry_index++;
+    long entry_offset = 0;
+    if (pt_entry_find(pt, index, &entry_index, &entry_offset) != PT_OK) {
+        return PT_ERROR_OUT_OF_BOUNDS;
     }
 
-    printf("index: %ld, offset: %ld\n", index, offset);
+    // check for edge cases
+    struct pt_entry* target = &pt->entries[entry_index];
+    if (entry_offset == target->start) {
+        // start of entry
+        target->start += 1;
+        target->size -= 1;
+        return PT_OK;
+    } else if (entry_offset == target->start + target->size) {
+        // end of entry
+        target->size -= 1;
+        return PT_OK;
+    }
 
-    if (index == target->size - 1) {
-        target->size--;
-    } else {
-        // adjust target size to account for the split
-        long prev_size = target->size;
-        target->size = (index - offset - 1);
+    // first half of the split
+    struct pt_entry split_before = {
+        .source = target->source,
+        .start = target->start,
+        .size = entry_offset - target->start,
+    };
 
-        // split the target entry into two separate entries
-        struct pt_entry split = {
-            .source = target->source,
-            .start = target->start + target->size,
-            .size = prev_size - target->size,
-        };
-        pt_entry_insert(pt, entry_index + 1, split);
+    // second half of the split
+    struct pt_entry split_after = {
+        .source = target->source,
+        .start = entry_offset + 1,
+        .size = target->size - (entry_offset - target->start) - 1,
+    };
+
+    // delete the original target entry
+    pt_entry_delete(pt, entry_index);
+
+    // gather all of the new entries in reverse order for simpler insertion
+    struct pt_entry entries[] = {
+        split_after,
+        split_before,
+    };
+
+    // only insert entries with size greather than zero
+    long entry_count = sizeof(entries) / sizeof(entries[0]);
+    for (long i = 0; i < entry_count; i++) {
+        if (entries[i].size <= 0) continue;
+        pt_entry_insert(pt, entry_index, entries[i]);
     }
 
     return PT_OK;

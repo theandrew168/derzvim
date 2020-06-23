@@ -12,7 +12,7 @@ static const test_func TESTS[] = {
     test_pt_size,
     test_pt_get,
     test_pt_insert,
-//    test_pt_delete,
+    test_pt_delete,
 };
 
 int

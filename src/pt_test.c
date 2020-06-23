@@ -117,9 +117,7 @@ test_pt_delete(void)
     struct pt pt = { 0 };
     pt_init(&pt, orig, strlen(orig));
 
-    pt_print(&pt);
     pt_delete(&pt, pt_size(&pt) - 1);
-    pt_print(&pt);
     char c = pt_get(&pt, pt_size(&pt) - 1);
     if (c != 'l') {
         fprintf(stderr, "delete failed at end of entry\n");
