@@ -11,7 +11,12 @@
 #include "ab.h"
 #include "term.h"
 
-#define DERZVIM_VERSION "0.0.1"
+#define TERM_SCREEN_CLEAR "\x1b[2J"
+#define TERM_CURSOR_RESET "\x1b[H"
+#define TERM_CURSOR_HIDE  "\x1b[?25l"
+#define TERM_CURSOR_SHOW  "\x1b[?25h"
+#define TERM_CURSOR_POS   "\x1b[6n"
+#define TERM_ROW_CLEAR    "\x1b[K"
 
 bool
 term_size(int output_fd, long* width, long* height)
@@ -28,7 +33,7 @@ term_size(int output_fd, long* width, long* height)
 }
 
 bool
-term_raw_mode(int input_fd)
+term_mode_raw(int input_fd)
 {
     struct termios raw;
     if (tcgetattr(input_fd, &raw) == -1) return false;
@@ -45,13 +50,54 @@ term_raw_mode(int input_fd)
 }
 
 bool
-term_cursor_pos(int input_fd, int output_fd, long* cx, long* cy)
+term_screen_clear(int output_fd)
+{
+    long size = strlen(TERM_SCREEN_CLEAR);
+    if (write(output_fd, TERM_SCREEN_CLEAR, size) != size) return false;
+    return true;
+}
+
+bool
+term_screen_write(int output_fd, char* buf, long size)
+{
+    struct ab ab = { 0 };
+
+    for (long i = 0; i < size; i++) {
+        char c = buf[i];
+        if (c == '\n') {
+            ab_append(&ab, "\r\n", 2);
+        } else {
+            ab_append(&ab, &c, 1);
+        }
+    }
+
+    if (write(output_fd, ab.buf, ab.size) != ab.size) {
+        ab_free(&ab);
+        return false;
+    }
+
+    ab_free(&ab);
+    return true;
+}
+
+bool
+term_row_clear(int output_fd)
+{
+    long size = strlen(TERM_ROW_CLEAR);
+    if (write(output_fd, TERM_ROW_CLEAR, size) != size) return false;
+    return true;
+}
+
+bool
+term_cursor_get(int input_fd, int output_fd, long* cx, long* cy)
 {
     // send an escape sequence to output_fd and then
     // read an escape sequence back on input_fd
 
     char buf[32] = { 0 };
-    if (write(output_fd, "\x1b[6n", 4) != 4) return false;
+    if (write(output_fd, TERM_CURSOR_POS, strlen(TERM_CURSOR_POS)) != strlen(TERM_CURSOR_POS)) {
+        return false;
+    }
 
     unsigned long i = 0;
     while (i < sizeof(buf) - 1) {
@@ -73,7 +119,43 @@ term_cursor_pos(int input_fd, int output_fd, long* cx, long* cy)
 }
 
 bool
-term_read_key(int input_fd, int* c)
+term_cursor_set(int output_fd, long cx, long cy)
+{
+    char buf[80] = { 0 };
+    long size = snprintf(buf, sizeof(buf), "\x1b[%ld;%ldH", cy + 1, cx + 1);
+    if(write(output_fd, buf, size) != size) {
+        return false;
+    }
+
+    return true;
+}
+
+bool
+term_cursor_reset(int output_fd)
+{
+    long size = strlen(TERM_CURSOR_RESET);
+    if (write(output_fd, TERM_CURSOR_RESET, size) != size) return false;
+    return true;
+}
+
+bool
+term_cursor_hide(int output_fd)
+{
+    long size = strlen(TERM_CURSOR_HIDE);
+    if (write(output_fd, TERM_CURSOR_HIDE, size) != size) return false;
+    return true;
+}
+
+bool
+term_cursor_show(int output_fd)
+{
+    long size = strlen(TERM_CURSOR_SHOW);
+    if (write(output_fd, TERM_CURSOR_SHOW, size) != size) return false;
+    return true;
+}
+
+bool
+term_key_wait(int input_fd, int* c)
 {
     if (c == NULL) return false;
     *c = 0;
@@ -125,58 +207,5 @@ term_read_key(int input_fd, int* c)
         }
     }
 
-    return true;
-}
-
-bool
-term_draw_rows(struct ab* ab, long width, long height)
-{
-    for (long y = 0; y < height; y++) {
-        if (y == height / 3) {
-            char welcome[80];
-            long len = snprintf(welcome, sizeof(welcome), "Derzvim -- version %s", DERZVIM_VERSION);
-            if (len > width) len = width;
-            long padding = (width - len) / 2;
-            if (padding) {
-                ab_append(ab, "~", 1);
-                padding--;
-            }
-            while (padding--) ab_append(ab, " ", 1);
-            ab_append(ab, welcome, len);
-        } else {
-            ab_append(ab, "~", 1);
-        }
-        ab_append(ab, "\x1b[K", 3);
-
-        // add CRNL on all lines except the last one
-        if (y < height - 1) {
-            ab_append(ab, "\r\n", 2);
-        }
-    }
-
-    return true;
-}
-
-bool
-term_screen_refresh(int output_fd, long width, long height, long cx, long cy)
-{
-    struct ab ab = { 0 };
-
-    ab_append(&ab, "\x1b[?25l", 6);
-    ab_append(&ab, "\x1b[H", 3);
-
-    term_draw_rows(&ab, width, height);
-
-    char buf[80] = { 0 };
-    snprintf(buf, sizeof(buf), "\x1b[%ld;%ldH", cy + 1, cx + 1);
-    ab_append(&ab, buf, strlen(buf));
-
-    ab_append(&ab, "\x1b[?25h", 6);
-
-    if (write(output_fd, ab.buf, ab.size) != ab.size) {
-        return false;
-    }
-
-    ab_free(&ab);
     return true;
 }

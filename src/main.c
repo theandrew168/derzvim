@@ -7,7 +7,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "ab.h"
 #include "pt.h"
 #include "term.h"
 
@@ -69,23 +68,25 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    if (!term_raw_mode(input_fd)) {
+    if (!term_mode_raw(input_fd)) {
         fprintf(stderr, "error enabling raw mode: %s\n", strerror(errno));
         return EXIT_FAILURE;
     }
 
+    term_cursor_hide(output_fd);
+    term_screen_clear(output_fd);
+    term_screen_write(output_fd, buf, size);
+    term_cursor_reset(output_fd);
+    term_cursor_show(output_fd);
+
     bool running = true;
     while (running) {
-        if (!term_screen_refresh(output_fd, width, height, cx, cy)) {
-            fprintf(stderr, "error refreshing screen\n");
-            tcsetattr(input_fd, TCSAFLUSH, &original_termios);
-            return EXIT_FAILURE;
-        }
-
         int c = 0;
-        if (!term_read_key(input_fd, &c)) {
-            fprintf(stderr, "error reading key: %s\n", strerror(errno));
+        if (!term_key_wait(input_fd, &c)) {
+            fprintf(stderr, "error waiting for input: %s\n", strerror(errno));
             tcsetattr(input_fd, TCSAFLUSH, &original_termios);
+            pt_free(&pt);
+            if (size > 0) free(buf);
             return EXIT_FAILURE;
         }
 
@@ -121,24 +122,19 @@ main(int argc, char* argv[])
                 cx = width - 1;
                 break;
         }
+
+        term_cursor_set(output_fd, cx, cy);
     }
 
-    if (write(output_fd, "\x1b[2J", 4) != 4) {
-        // stub
-    }
-    if (write(output_fd, "\x1b[H", 3) != 3) {
-        // stub
-    }
+    term_screen_clear(output_fd);
+    term_cursor_reset(output_fd);
 
     // restore the original termios config
     tcsetattr(input_fd, TCSAFLUSH, &original_termios);
 
-    pt_free(&pt);
-
     // free the original text buffer if it came from a file (and malloc)
-    if (size > 0) {
-        free(buf);
-    }
+    pt_free(&pt);
+    if (size > 0) free(buf);
 
     return EXIT_SUCCESS;
 }

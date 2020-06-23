@@ -3,8 +3,6 @@
 
 #include <stdbool.h>
 
-#include "ab.h"
-
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 enum key {
@@ -20,11 +18,18 @@ enum key {
 };
 
 bool term_size(int output_fd, long* width, long* height);
-bool term_raw_mode(int input_fd);
-bool term_cursor_pos(int input_fd, int output_fd, long* cx, long* cy);
-bool term_read_key(int input_fd, int* c);
+bool term_mode_raw(int input_fd);
 
-bool term_draw_rows(struct ab* ab, long width, long height);
-bool term_screen_refresh(int output_fd, long width, long height, long cx, long cy);
+bool term_screen_clear(int output_fd);
+bool term_screen_write(int output_fd, char* buf, long size);
+bool term_row_clear(int output_fd);
+
+bool term_cursor_get(int input_fd, int output_fd, long* cx, long* cy);
+bool term_cursor_set(int output_fd, long cx, long cy);
+bool term_cursor_reset(int output_fd);
+bool term_cursor_hide(int output_fd);
+bool term_cursor_show(int output_fd);
+
+bool term_key_wait(int input_fd, int* c);
 
 #endif
