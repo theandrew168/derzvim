@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "ab.h"
+#include "pt.h"
 
 #define DERZVIM_VERSION "0.0.1"
 

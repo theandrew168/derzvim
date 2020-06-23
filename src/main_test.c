@@ -9,7 +9,10 @@ typedef bool(*test_func)(void);
 
 static const test_func TESTS[] = {
     test_ab,
-    test_pt,
+    test_pt_size,
+    test_pt_get,
+    test_pt_insert,
+//    test_pt_delete,
 };
 
 int
