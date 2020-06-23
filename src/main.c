@@ -7,14 +7,21 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "pt.h"
+#include "array.h"
 #include "term.h"
+
+static long
+text_index()
+{
+
+    return -1;
+}
 
 int
 main(int argc, char* argv[])
 {
-    char* buf = "";
-    long size = 0;
+    char* orig_buf = "";
+    long orig_size = 0;
 
     // load a file if present on CLI
     if (argc == 2) {
@@ -25,19 +32,19 @@ main(int argc, char* argv[])
         }
 
         fseek(fp, 0, SEEK_END);
-        size = ftell(fp);
+        orig_size = ftell(fp);
         fseek(fp, 0, SEEK_SET);
 
-        buf = malloc(size);
-        if (buf == NULL) {
+        orig_buf = malloc(orig_size);
+        if (orig_buf == NULL) {
             fclose(fp);
             fprintf(stderr, "failed to allocate buffer for file: %s\n", argv[1]);
             return EXIT_FAILURE;
         }
 
-        long count = fread(buf, 1, size, fp);
-        if (count != size) {
-            free(buf);
+        long count = fread(orig_buf, 1, orig_size, fp);
+        if (count != orig_size) {
+            free(orig_buf);
             fclose(fp);
             fprintf(stderr, "failed to read file into buffer: %s\n", argv[1]);
             return EXIT_FAILURE;
@@ -46,13 +53,12 @@ main(int argc, char* argv[])
         fclose(fp);
     }
 
-    struct pt pt = { 0 };
-    pt_init(&pt, buf, size);
-
+    // primary editor state
     int input_fd = STDIN_FILENO;
     int output_fd = STDOUT_FILENO;
     long width = 0;
     long height = 0;
+    long scroll = 0;
     long cx = 0;
     long cy = 0;
 
@@ -73,41 +79,44 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    term_cursor_reset(output_fd);
     term_cursor_hide(output_fd);
     term_screen_clear(output_fd);
-    term_screen_write(output_fd, buf, size);
-    term_cursor_reset(output_fd);
+    term_screen_write(output_fd, width, height, "hello world", 11);
     term_cursor_show(output_fd);
+    term_cursor_reset(output_fd);
 
     bool running = true;
     while (running) {
+        // wait for input
         int c = 0;
         if (!term_key_wait(input_fd, &c)) {
             fprintf(stderr, "error waiting for input: %s\n", strerror(errno));
             tcsetattr(input_fd, TCSAFLUSH, &original_termios);
-            pt_free(&pt);
-            if (size > 0) free(buf);
+            if (orig_size > 0) free(orig_buf);
             return EXIT_FAILURE;
         }
 
-        // what does a given key[combo] do in a given mode?
-        // typedef some sort of handler func and make a nice table
-        //   for each mode?
+        // process the input
         switch (c) {
             case CTRL_KEY('q'):
                 running = false;
                 break;
             case KEY_ARROW_LEFT:
-                if (cx > 0) cx--;
+                if (cx <= 0) break;
+                cx--;
                 break;
             case KEY_ARROW_RIGHT:
-                if (cx < width - 1) cx++;
+                if (cx >= width - 1) break;
+                cx++;
                 break;
             case KEY_ARROW_UP:
-                if (cy > 0) cy--;
+                if (cy <= 0) break;
+                cy--;
                 break;
             case KEY_ARROW_DOWN:
-                if (cy < height - 1) cy++;
+                if (cy >= height - 1) break;
+                cy++;
                 break;
             case KEY_PAGE_UP:
                 cy = 0;
@@ -121,8 +130,27 @@ main(int argc, char* argv[])
             case KEY_END:
                 cx = width - 1;
                 break;
+            case KEY_ENTER:
+                if (cy >= height - 1) break;
+                cy++;
+                break;
+            case KEY_BACKSPACE:
+                if (cx <= 0) break;
+                cx--;
+                break;
+            default:
+                if (c < 32 || c > 126) break;
+                break;
         }
 
+        // update the screen
+        term_cursor_reset(output_fd);
+        term_cursor_hide(output_fd);
+        term_screen_clear(output_fd);
+        term_screen_write(output_fd, width, height, "hello world", 11);
+        term_cursor_show(output_fd);
+
+        // reposition the cursor
         term_cursor_set(output_fd, cx, cy);
     }
 
@@ -133,8 +161,7 @@ main(int argc, char* argv[])
     tcsetattr(input_fd, TCSAFLUSH, &original_termios);
 
     // free the original text buffer if it came from a file (and malloc)
-    pt_free(&pt);
-    if (size > 0) free(buf);
+    if (orig_size > 0) free(orig_buf);
 
     return EXIT_SUCCESS;
 }

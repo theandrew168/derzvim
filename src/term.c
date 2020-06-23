@@ -8,7 +8,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "ab.h"
+#include "array.h"
 #include "term.h"
 
 #define TERM_SCREEN_CLEAR "\x1b[2J"
@@ -58,25 +58,40 @@ term_screen_clear(int output_fd)
 }
 
 bool
-term_screen_write(int output_fd, char* buf, long size)
+term_screen_write(int output_fd, long width, long height, char* buf, long size)
 {
-    struct ab ab = { 0 };
+    // Behavior:
+    // 1. Don't scroll past the current height
+    // 2. Lines wrap onto the next line
 
+    struct array array = { 0 };
+    array_init(&array);
+
+    long line_count = 0;
+    long line_width = 0;
     for (long i = 0; i < size; i++) {
         char c = buf[i];
         if (c == '\n') {
-            ab_append(&ab, "\r\n", 2);
+            array_append(&array, '\r');
+            array_append(&array, '\n');
+            line_count++;
+            if (line_count == height - 1) break;
+            line_width = 0;
         } else {
-            ab_append(&ab, &c, 1);
+            array_append(&array, c);
+            line_width++;
+            if (line_width > width) {
+                
+            }
         }
     }
 
-    if (write(output_fd, ab.buf, ab.size) != ab.size) {
-        ab_free(&ab);
+    if (write(output_fd, array_buffer(&array), array_size(&array)) != array_size(&array)) {
+        array_free(&array);
         return false;
     }
 
-    ab_free(&ab);
+    array_free(&array);
     return true;
 }
 
@@ -108,7 +123,7 @@ term_cursor_get(int input_fd, int output_fd, long* cx, long* cy)
     buf[i] = '\0';
 
     // parse the cursor pos from the resulting escape sequence
-    if (buf[0] != '\x1b' || buf[1] != '[') return false;
+    if (buf[0] != KEY_ESCAPE || buf[1] != '[') return false;
     if (sscanf(&buf[2], "%ld;%ld", cy, cx) != 2) return false;
 
     // derzvim uses 0-based indexing; termios stuff uses 1-based
@@ -169,7 +184,7 @@ term_key_wait(int input_fd, int* c)
 
     // check for extra data beyond the escape, else just
     // return the lone escape char. TODO: clean this up?
-    if (*c == '\x1b') {
+    if (*c == KEY_ESCAPE) {
         char seq[3] = { 0 };
         if (read(input_fd, &seq[0], 1) != 1) return true;
         if (read(input_fd, &seq[1], 1) != 1) return true;

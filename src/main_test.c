@@ -2,17 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "ab_test.c"
-#include "pt_test.c"
+#include "array_test.c"
 
 typedef bool(*test_func)(void);
 
 static const test_func TESTS[] = {
-    test_ab,
-    test_pt_size,
-    test_pt_get,
-    test_pt_insert,
-    test_pt_delete,
+    test_array_insert,
 };
 
 int
