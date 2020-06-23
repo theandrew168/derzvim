@@ -16,11 +16,13 @@ all: libderzvim.a libderzvim.so derzvim derzvim_tests
 
 libderzvim_sources =  \
   src/ab.c            \
-  src/pt.c
+  src/pt.c            \
+  src/term.c
 libderzvim_objects = $(libderzvim_sources:.c=.o)
 
 src/ab.o: src/ab.c src/ab.h
 src/pt.o: src/pt.c src/pt.h src/ab.h
+src/term.o: src/term.c src/term.h src/ab.h
 
 libderzvim.a: $(libderzvim_objects)
 	@echo "STATIC  $@"

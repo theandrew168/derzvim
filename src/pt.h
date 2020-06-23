@@ -42,7 +42,6 @@ char pt_get(const struct pt* pt, long index);
 int pt_insert(struct pt* pt, long index, char c);
 int pt_delete(struct pt* pt, long index);
 
-//int pt_get_seq(const struct pt* pt, long start, long end, char* buf, long size);
 void pt_print(const struct pt* pt);
 
 #endif
