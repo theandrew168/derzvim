@@ -3,6 +3,7 @@
 
 #include "array.h"
 
+// TODO: just bake the array in?
 struct line {
     struct array array;
     struct line* prev;
@@ -17,5 +18,6 @@ enum line_status {
 // TODO: init / free
 // TODO: get head and tail from a FILE* ?
 // TODO: serialize head into a FILE* ?
+// TODO: extra helper stuff like split / join?
 
 #endif

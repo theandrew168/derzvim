@@ -145,17 +145,57 @@ main(int argc, char* argv[])
                 if (cx >= line->array.size) cx = line->array.size - 1;
                 cy++;
                 break;
+            // move the cursor back to the left edge
+            case KEY_HOME:
+                cx = 0;
+                break;
+            // move the cursor the end of the current line
+            case KEY_END:
+                cx = line->array.size - 1;
+                break;
             // break the line at the current cursor pos
             case KEY_ENTER:
                 if (cy >= height - 1) break;
+
+                struct line* cur = calloc(1, sizeof(struct line));
+                array_init(&cur->array);
+                for (long i = cx; i < line->array.size; i++) {
+                    array_append(&cur->array, line->array.buf[i]);
+                }
+                for (long i = line->array.size - 1; i >= cx; i--) {
+                    array_delete(&line->array, i);
+                }
+                array_append(&line->array, '\n');
+                cur->prev = line;
+                cur->next = line->next;
+                line->next = cur;
+
                 line = line->next;
-                if (cx > line->array.size) cx = line->array.size;
+                line_count++;
+
+                cx = 0;
                 cy++;
                 break;
             // delete the char behind the cursor if not at left edge AND collapse lines
             case KEY_BACKSPACE:
-                if (cx <= 0) break;
-                cx--;
+                if (cx == 0 && line->prev != NULL) {
+                    // delete NL from prev line
+                    cx = line->prev->array.size - 1;
+                    array_delete(&line->prev->array, line->prev->array.size - 1);
+                    for (long i = 0; i < line->array.size; i++) {
+                        array_append(&line->prev->array, line->array.buf[i]);
+                    }
+                    struct line* old = line;
+                    if (line->next != NULL) line->next->prev = line->prev;
+                    line->prev->next = line->next;
+                    line = line->prev;
+                    line_count--;
+                    free(old);
+                    cy--;
+                } else if (cx > 0) {
+                    cx--;
+                    array_delete(&line->array, cx);
+                }
                 break;
             // insert a char at the current cursor pos (adjust line as necessary)
             default:
