@@ -24,11 +24,12 @@ main(int argc, char* argv[])
     long cx = 0;
     long cy = 0;
 
-    struct line* blank = calloc(1, sizeof(struct line));
-    array_init(&blank->array);
+    struct line* line = calloc(1, sizeof(struct line));
+    array_init(&line->array);
 
-    struct line* head = blank;
-    struct line* tail = blank;
+    struct line* head = line;
+    struct line* tail = line;
+    long line_count = 0;
     long lx = 0;
     long ly = 0;
 
@@ -43,17 +44,18 @@ main(int argc, char* argv[])
         // read through each character in the file
         int c = 0;
         while ((c = fgetc(fp)) != EOF) {
+            array_append(&tail->array, c);
+
             // add a new line to the DLL when found
             if (c == '\n') {
-                struct line* line = calloc(1, sizeof(struct line));
-                array_init(&line->array);
-                line->prev = tail;
-                tail->next = line;
-                tail = line;
-                continue;
-            }
+                struct line* cur = calloc(1, sizeof(struct line));
+                array_init(&cur->array);
+                cur->prev = tail;
+                tail->next = cur;
+                tail = cur;
 
-            array_append(&tail->array, c);
+                line_count++;
+            }
         }
 
         if (ferror(fp)) {
@@ -62,6 +64,10 @@ main(int argc, char* argv[])
         }
 
         fclose(fp);
+    } else {
+        // start empty files with a single newline
+        array_append(&tail->array, '\n');
+        line_count++;
     }
 
     // capture the original termios config to restore later
@@ -87,7 +93,12 @@ main(int argc, char* argv[])
     term_cursor_reset(output_fd);
     term_cursor_hide(output_fd);
     term_screen_clear(output_fd);
-    term_screen_write(output_fd, width, height, "hello world", 11);
+    struct line* draw = head;
+    for (long i = 0; i < height; i++) {
+        if (draw == NULL) break;
+        term_screen_write(output_fd, width, height, draw->array.buf, draw->array.size);
+        draw = draw->next;        
+    }
     term_cursor_show(output_fd);
     term_cursor_reset(output_fd);
 
@@ -116,21 +127,29 @@ main(int argc, char* argv[])
             // move the cursor right but not past the right edge OR end of line
             case KEY_ARROW_RIGHT:
                 if (cx >= width - 1) break;
+                if (cx >= line->array.size - 1) break;
                 cx++;
                 break;
             // move the cursor up but not past the top edge
             case KEY_ARROW_UP:
                 if (cy <= 0) break;
+                line = line->prev;
+                if (cx >= line->array.size) cx = line->array.size - 1;
                 cy--;
                 break;
             // move the cursor down but not past the bottom edge OR end of file
             case KEY_ARROW_DOWN:
                 if (cy >= height - 1) break;
+                if (cy >= line_count - 1) break;
+                line = line->next;
+                if (cx >= line->array.size) cx = line->array.size - 1;
                 cy++;
                 break;
             // break the line at the current cursor pos
             case KEY_ENTER:
                 if (cy >= height - 1) break;
+                line = line->next;
+                if (cx > line->array.size) cx = line->array.size;
                 cy++;
                 break;
             // delete the char behind the cursor if not at left edge AND collapse lines
@@ -141,6 +160,8 @@ main(int argc, char* argv[])
             // insert a char at the current cursor pos (adjust line as necessary)
             default:
                 if (c < 32 || c > 126) break;
+                array_insert(&line->array, cx, c);
+                cx++;
                 break;
         }
 
@@ -150,7 +171,12 @@ main(int argc, char* argv[])
         term_cursor_reset(output_fd);
         term_cursor_hide(output_fd);
         term_screen_clear(output_fd);
-        term_screen_write(output_fd, width, height, "hello world", 11);
+        struct line* draw = head;
+        for (long i = 0; i < height; i++) {
+            if (draw == NULL) break;
+            term_screen_write(output_fd, width, height, draw->array.buf, draw->array.size);
+            draw = draw->next;        
+        }
         term_cursor_show(output_fd);
 
         // reposition the cursor
@@ -163,8 +189,19 @@ main(int argc, char* argv[])
     // restore the original termios config
     tcsetattr(input_fd, TCSAFLUSH, &original_termios);
 
+    // write the output.txt file
+    FILE* fp = fopen("output.txt", "w");
+    if (fp == NULL) {
+        fprintf(stderr, "failed to open output file: output.txt\n");
+    } else {
+        for (struct line* write = head; write != NULL; write = write->next) {
+            fwrite(write->array.buf, write->array.size, 1, fp);
+        }
+        fclose(fp);
+    }
+
     // free the DLL of lines
-    struct line* line = head;
+    line = head;
     while (line != NULL) {
         struct line* current = line;
         line = line->next;
