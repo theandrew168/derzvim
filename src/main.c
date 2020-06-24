@@ -8,13 +8,29 @@
 #include <unistd.h>
 
 #include "array.h"
+#include "line.h"
 #include "term.h"
 
 int
 main(int argc, char* argv[])
 {
-    char* orig_buf = "";
-    long orig_size = 0;
+    // primary editor state
+    int input_fd = STDIN_FILENO;
+    int output_fd = STDOUT_FILENO;
+
+    long width = 0;
+    long height = 0;
+    long scroll = 0;
+    long cx = 0;
+    long cy = 0;
+
+    struct line* blank = calloc(1, sizeof(struct line));
+    array_init(&blank->array);
+
+    struct line* head = blank;
+    struct line* tail = blank;
+    long lx = 0;
+    long ly = 0;
 
     // load a file if present on CLI
     if (argc == 2) {
@@ -24,39 +40,29 @@ main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        fseek(fp, 0, SEEK_END);
-        orig_size = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
+        // read through each character in the file
+        int c = 0;
+        while ((c = fgetc(fp)) != EOF) {
+            // add a new line to the DLL when found
+            if (c == '\n') {
+                struct line* line = calloc(1, sizeof(struct line));
+                array_init(&line->array);
+                line->prev = tail;
+                tail->next = line;
+                tail = line;
+                continue;
+            }
 
-        orig_buf = malloc(orig_size);
-        if (orig_buf == NULL) {
-            fclose(fp);
-            fprintf(stderr, "failed to allocate buffer for file: %s\n", argv[1]);
-            return EXIT_FAILURE;
+            array_append(&tail->array, c);
         }
 
-        long count = fread(orig_buf, 1, orig_size, fp);
-        if (count != orig_size) {
-            free(orig_buf);
-            fclose(fp);
-            fprintf(stderr, "failed to read file into buffer: %s\n", argv[1]);
+        if (ferror(fp)) {
+            fprintf(stderr, "IO error while reading file: %s\n", argv[1]);
             return EXIT_FAILURE;
         }
 
         fclose(fp);
     }
-
-    // primary editor state
-    int input_fd = STDIN_FILENO;
-    int output_fd = STDOUT_FILENO;
-    long width = 0;
-    long height = 0;
-    long scroll = 0;
-    long cx = 0;
-    long cy = 0;
-    long lx = 0;
-    long ly = 0;
-    // TODO: DDL of lines?
 
     // capture the original termios config to restore later
     struct termios original_termios;
@@ -92,7 +98,7 @@ main(int argc, char* argv[])
         if (!term_key_wait(input_fd, &c)) {
             fprintf(stderr, "error waiting for input: %s\n", strerror(errno));
             tcsetattr(input_fd, TCSAFLUSH, &original_termios);
-            if (orig_size > 0) free(orig_buf);
+            // TODO free ALL lines
             return EXIT_FAILURE;
         }
 
@@ -157,8 +163,14 @@ main(int argc, char* argv[])
     // restore the original termios config
     tcsetattr(input_fd, TCSAFLUSH, &original_termios);
 
-    // free the original text buffer if it came from a file (and malloc)
-    if (orig_size > 0) free(orig_buf);
+    // free the DLL of lines
+    struct line* line = head;
+    while (line != NULL) {
+        struct line* current = line;
+        line = line->next;
+        array_free(&current->array);
+        free(current);
+    }
 
     return EXIT_SUCCESS;
 }
