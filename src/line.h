@@ -15,7 +15,9 @@ enum line_status {
     LINE_ERROR,
 };
 
-// TODO: init / free
+int line_init(struct line* line);
+int line_free(struct line* line);
+
 // TODO: get head and tail from a FILE* ?
 // TODO: serialize head into a FILE* ?
 // TODO: extra helper stuff like split / join?

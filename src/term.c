@@ -60,15 +60,10 @@ term_screen_clear(int output_fd)
 bool
 term_screen_write(int output_fd, long width, long height, char* buf, long size)
 {
-    // Behavior:
-    // 1. Don't scroll past the current height
-    // 2. Lines wrap onto the next line
-
     struct array array = { 0 };
     array_init(&array);
 
     long line_count = 0;
-    long line_width = 0;
     for (long i = 0; i < size; i++) {
         char c = buf[i];
         if (c == '\n') {
@@ -76,13 +71,8 @@ term_screen_write(int output_fd, long width, long height, char* buf, long size)
             array_append(&array, '\n');
             line_count++;
             if (line_count == height - 1) break;
-            line_width = 0;
         } else {
             array_append(&array, c);
-            line_width++;
-            if (line_width > width) {
-                
-            }
         }
     }
 
