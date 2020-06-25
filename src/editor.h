@@ -41,6 +41,7 @@ int editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
 int editor_free(struct editor* e);
 
 int editor_draw(const struct editor* e);
+int editor_key_wait(const struct editor* e, int* c);
 
 int editor_cursor_left(struct editor* e);
 int editor_cursor_right(struct editor* e);

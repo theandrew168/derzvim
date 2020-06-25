@@ -92,6 +92,10 @@ editor_free(struct editor* e)
 {
     assert(e != NULL);
 
+    // clear and reset the terminal before exiting
+    term_screen_clear(e->output_fd);
+    term_cursor_reset(e->output_fd);
+
     // restore original termios config
     tcsetattr(e->input_fd, TCSAFLUSH, &e->original_termios);
 
@@ -149,6 +153,17 @@ editor_draw(const struct editor* e)
 
     term_cursor_set(e->output_fd, 0, 0);
     term_cursor_show(e->output_fd);
+
+    return EDITOR_OK;
+}
+
+int
+editor_key_wait(const struct editor* e, int* c)
+{
+    if (!term_key_wait(e->input_fd, c)) {
+        fprintf(stderr, "error waiting for input: %s\n", strerror(errno));
+        return EDITOR_ERROR;
+    }
 
     return EDITOR_OK;
 }

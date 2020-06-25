@@ -15,16 +15,13 @@
 int
 main(int argc, char* argv[])
 {
-    int input_fd = STDIN_FILENO;
-    int output_fd = STDOUT_FILENO;
-
     char* path = NULL;
     if (argc == 2) {
         path = argv[1];
     }
 
     struct editor e = { 0 };
-    if (editor_init(&e, input_fd, output_fd, path) != EDITOR_OK) {
+    if (editor_init(&e, STDIN_FILENO, STDOUT_FILENO, path) != EDITOR_OK) {
         fprintf(stderr, "failed to init editor\n");
         return EXIT_FAILURE;
     }
@@ -36,8 +33,7 @@ main(int argc, char* argv[])
 
         // wait for input
         int c = 0;
-        if (!term_key_wait(input_fd, &c)) {
-            fprintf(stderr, "error waiting for input: %s\n", strerror(errno));
+        if (editor_key_wait(&e, &c) != EDITOR_OK) {
             editor_free(&e);
             return EXIT_FAILURE;
         }
@@ -155,9 +151,6 @@ main(int argc, char* argv[])
 //                break;
         }
     }
-
-    term_screen_clear(output_fd);
-    term_cursor_reset(output_fd);
 
     editor_free(&e);
     return EXIT_SUCCESS;
