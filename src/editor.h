@@ -43,6 +43,11 @@ int editor_free(struct editor* e);
 int editor_draw(const struct editor* e);
 int editor_key_wait(const struct editor* e, int* c);
 
+int editor_rune_insert(struct editor* e, char rune);
+int editor_rune_delete(struct editor* e);
+
+int editor_line_break(struct editor* e);
+
 int editor_cursor_left(struct editor* e);
 int editor_cursor_right(struct editor* e);
 int editor_cursor_up(struct editor* e);
