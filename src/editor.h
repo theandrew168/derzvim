@@ -28,6 +28,7 @@ struct editor {
     struct line* head;
     struct line* tail;
     long line_count;
+    long line_index;
     long line_pos;
     long line_affinity;
 };

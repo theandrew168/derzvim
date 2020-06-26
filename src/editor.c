@@ -29,6 +29,7 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     e->head = e->current_line;
     e->tail = e->current_line;
     e->line_count = 0;
+    e->line_index = 0;
     e->line_pos = 0;
     e->line_affinity = 0;
 
@@ -41,18 +42,24 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
 
         // read through each character in the file
         int c = 0;
+        bool newline = false;
         while ((c = fgetc(fp)) != EOF) {
-            array_append(&e->tail->array, c);
-
-            // add a new line to the DLL when found
-            if (c == '\n') {
+            if (newline) {
                 struct line* line = calloc(1, sizeof(struct line));
                 line_init(line);
                 line->prev = e->tail;
                 e->tail->next = line;
                 e->tail = line;
 
+                newline = false;
+            }
+
+            array_append(&e->tail->array, c);
+
+            // add a new line to the DLL when found
+            if (c == '\n') {
                 e->line_count++;
+                newline = true;
             }
         }
 
@@ -134,8 +141,13 @@ editor_draw(const struct editor* e)
     term_cursor_reset(e->output_fd);
     term_cursor_hide(e->output_fd);
 
-    // draw the text lines
+    // this is our iterator
     struct line* line = e->head;
+
+    // skip lines based on scroll value
+    for (long s = e->scroll; s > 0; s--) line = line->next;
+
+    // draw the text lines
     for (long i = 0; i < e->height - 1; i++) {
         if (line == NULL) break;
         term_screen_write(e->output_fd, e->width, e->height, line->array.buf, line->array.size);
@@ -144,14 +156,21 @@ editor_draw(const struct editor* e)
 
     // draw the status message
     char status[128] = { 0 };
-    snprintf(status, sizeof(status), "-- cx: %ld | cy: %ld | lp: %ld | la: %ld | lc: %ld --",
-        e->cursor_x, e->cursor_y, e->line_pos, e->line_affinity, e->line_count);
+    snprintf(status, sizeof(status),
+        "-- cx: %3ld | cy: %3ld | lp: %3ld | ls: %3ld | la: %3ld | lc: %3ld --",
+        e->cursor_x,
+        e->cursor_y,
+        e->line_pos,
+        line_size(e->current_line),
+        e->line_affinity,
+        e->line_count);
     term_cursor_set(e->output_fd, 1, e->height - 1);
     term_screen_write(e->output_fd, e->width, e->height, status, strlen(status));
 
     // draw the cursor pos indicator
     char curpos[64] = { 0 };
-    long curpos_size = snprintf(curpos, sizeof(curpos), "%8ld,%-8ld", e->cursor_y + 1, e->cursor_x + 1);
+    long curpos_size = snprintf(curpos, sizeof(curpos),
+        "%8ld,%-8ld", e->line_index + 1, e->line_pos + 1);
     term_cursor_set(e->output_fd, e->width - curpos_size - 1, e->height - 1);
     term_screen_write(e->output_fd, e->width, e->height, curpos, strlen(curpos));
 
@@ -217,6 +236,7 @@ editor_rune_delete(struct editor* e)
         free(old);
 
         e->cursor_y--;
+        e->line_index--;
         e->line_count--;
     } else if (e->cursor_x > 0) {
         editor_cursor_left(e);
@@ -256,10 +276,8 @@ editor_line_break(struct editor* e)
     e->line_count++;
 
     // move cursor to the start of the new line
-    e->cursor_y++;
-    e->cursor_x = 0;
-    e->line_pos = 0;
     e->line_affinity = 0;
+    editor_cursor_down(e);
 
     return EDITOR_OK;
 }
@@ -296,8 +314,20 @@ editor_cursor_up(struct editor* e)
 {
     assert(e != NULL);
 
-    if (e->cursor_y <= 0) return EDITOR_OK;
+    // if at top of lines, done
+    if (e->current_line->prev == NULL) return EDITOR_OK;
+
+    if (e->cursor_y <= 0) {
+        e->scroll--;  // scroll if at top
+    } else {
+        e->cursor_y--;  // else move cursor up
+    }
+
+    // move to the prev line
     e->current_line = line_prev(e->current_line);
+    e->line_index--;
+
+    // handle affinity
     if (e->line_affinity >= line_size(e->current_line)) {
         e->cursor_x = line_size(e->current_line) - 1;
         e->line_pos = line_size(e->current_line) - 1;
@@ -305,7 +335,6 @@ editor_cursor_up(struct editor* e)
         e->cursor_x = e->line_affinity;
         e->line_pos = e->line_affinity;
     }
-    e->cursor_y--;
 
     return EDITOR_OK;
 }
@@ -315,10 +344,21 @@ editor_cursor_down(struct editor* e)
 {
     assert(e != NULL);
 
+    // if at bottom of lines, done
+    if (e->current_line->next == NULL) return EDITOR_OK;  
+
     // leave a line for the status bar
-    if (e->cursor_y >= e->height - 2) return EDITOR_OK;
-    if (e->cursor_y >= e->line_count - 1) return EDITOR_OK;
-    e->current_line = line_next(e->current_line);
+    if (e->cursor_y >= e->height - 2) {
+        e->scroll++;  // scroll if at bottom
+    } else {
+        e->cursor_y++;  // else move cursor down
+    }
+
+    // move to the next line
+    e->current_line = e->current_line->next;
+    e->line_index++;
+
+    // handle affinity
     if (e->line_affinity >= line_size(e->current_line)) {
         e->cursor_x = line_size(e->current_line) - 1;
         e->line_pos = line_size(e->current_line) - 1;
@@ -326,7 +366,6 @@ editor_cursor_down(struct editor* e)
         e->cursor_x = e->line_affinity;
         e->line_pos = e->line_affinity;
     }
-    e->cursor_y++;
 
     return EDITOR_OK;
 }
