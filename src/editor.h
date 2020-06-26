@@ -24,9 +24,10 @@ struct editor {
     long cursor_x;
     long cursor_y;
 
-    struct line* current_line;
     struct line* head;
     struct line* tail;
+
+    struct line* line;
     long line_count;
     long line_index;
     long line_pos;

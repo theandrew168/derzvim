@@ -11,6 +11,12 @@
 #include "array.h"
 #include "term.h"
 
+// TODO: are these valid VT100 codes?
+#define TERM_SCREEN_SAVE    "\x1b[?47h"
+#define TERM_SCREEN_RESTORE "\x1b[?47l"
+#define TERM_CURSOR_SAVE    "\x1b" "7"
+#define TERM_CURSOR_RESTORE "\x1b" "8"
+
 #define TERM_SCREEN_CLEAR "\x1b[2J"
 #define TERM_CURSOR_RESET "\x1b[H"
 #define TERM_CURSOR_HIDE  "\x1b[?25l"
@@ -38,14 +44,33 @@ term_mode_raw(int input_fd)
     struct termios raw;
     if (tcgetattr(input_fd, &raw) == -1) return false;
 
-    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    // Section: Raw mode
+    // https://man7.org/linux/man-pages/man3/termios.3.html
+    raw.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
     raw.c_oflag &= ~(OPOST);
+    raw.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+    raw.c_cflag &= ~(CSIZE | PARENB);
     raw.c_cflag |=  (CS8);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
 
     if (tcsetattr(input_fd, TCSAFLUSH, &raw) == -1) return false;
+    return true;
+}
+
+bool
+term_screen_save(int output_fd)
+{
+    long size = strlen(TERM_SCREEN_SAVE);
+    if (write(output_fd, TERM_SCREEN_SAVE, size) != size) return false;
+    return true;
+}
+
+bool
+term_screen_restore(int output_fd)
+{
+    long size = strlen(TERM_SCREEN_RESTORE);
+    if (write(output_fd, TERM_SCREEN_RESTORE, size) != size) return false;
     return true;
 }
 
@@ -58,30 +83,9 @@ term_screen_clear(int output_fd)
 }
 
 bool
-term_screen_write(int output_fd, long width, long height, char* buf, long size)
+term_screen_write(int output_fd, char* buf, long size)
 {
-    struct array array = { 0 };
-    array_init(&array);
-
-    long line_count = 0;
-    for (long i = 0; i < size; i++) {
-        char c = buf[i];
-        if (c == '\n') {
-            array_append(&array, '\r');
-            array_append(&array, '\n');
-            line_count++;
-            if (line_count == height - 1) break;
-        } else {
-            array_append(&array, c);
-        }
-    }
-
-    if (write(output_fd, array_buffer(&array), array_size(&array)) != array_size(&array)) {
-        array_free(&array);
-        return false;
-    }
-
-    array_free(&array);
+    if (write(output_fd, buf, size) != size) return false;
     return true;
 }
 
@@ -90,6 +94,22 @@ term_row_clear(int output_fd)
 {
     long size = strlen(TERM_ROW_CLEAR);
     if (write(output_fd, TERM_ROW_CLEAR, size) != size) return false;
+    return true;
+}
+
+bool
+term_cursor_save(int output_fd)
+{
+    long size = strlen(TERM_CURSOR_SAVE);
+    if (write(output_fd, TERM_CURSOR_SAVE, size) != size) return false;
+    return true;
+}
+
+bool
+term_cursor_restore(int output_fd)
+{
+    long size = strlen(TERM_CURSOR_RESTORE);
+    if (write(output_fd, TERM_CURSOR_RESTORE, size) != size) return false;
     return true;
 }
 
