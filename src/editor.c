@@ -205,7 +205,7 @@ editor_rune_insert(struct editor* e, char rune)
     line_insert(e->line, e->line_pos, rune);
     e->cursor_x++;
     e->line_pos++;
-    e->line_affinity++;
+    e->line_affinity = e->line_pos;
 
     return EDITOR_OK;
 }
@@ -258,7 +258,7 @@ editor_line_break(struct editor* e)
     struct line* line = calloc(1, sizeof(struct line));
     line_init(line);
 
-    // copy rest of existing line to the new one (including the NL)
+    // copy rest of existing line to the new one
     for (long i = e->line_pos; i < line_size(e->line); i++) {
         line_append(line, line_get(e->line, i));
     }
@@ -267,7 +267,6 @@ editor_line_break(struct editor* e)
     for (long i = line_size(e->line) - 1; i >= e->line_pos; i--) {
         line_delete(e->line, i);
     }
-    line_append(e->line, '\n');
 
     // link the new line in
     line->prev = e->line;
@@ -277,10 +276,13 @@ editor_line_break(struct editor* e)
 
     e->line = line;
     e->line_count++;
+    e->line_index++;
 
     // move cursor to the start of the new line
+    e->cursor_x = 0;
+    e->cursor_y++;
     e->line_affinity = 0;
-    editor_cursor_down(e);
+    e->line_pos = 0;
 
     return EDITOR_OK;
 }
@@ -304,7 +306,7 @@ editor_cursor_right(struct editor* e)
     assert(e != NULL);
 
     if (e->cursor_x >= e->width - 1) return EDITOR_OK;
-    if (e->cursor_x >= line_size(e->line) - 1) return EDITOR_OK;  // will be "- 2" in normal mode
+    if (e->cursor_x >= line_size(e->line)) return EDITOR_OK;  // will be "- 1" in normal mode
     e->cursor_x++;
     e->line_pos++;
     e->line_affinity = e->line_pos;
@@ -332,8 +334,8 @@ editor_cursor_up(struct editor* e)
 
     // handle affinity
     if (e->line_affinity >= line_size(e->line)) {
-        e->cursor_x = line_size(e->line) - 1;
-        e->line_pos = line_size(e->line) - 1;
+        e->cursor_x = line_size(e->line);
+        e->line_pos = line_size(e->line);
     } else {
         e->cursor_x = e->line_affinity;
         e->line_pos = e->line_affinity;
@@ -363,8 +365,8 @@ editor_cursor_down(struct editor* e)
 
     // handle affinity
     if (e->line_affinity >= line_size(e->line)) {
-        e->cursor_x = line_size(e->line) - 1;
-        e->line_pos = line_size(e->line) - 1;
+        e->cursor_x = line_size(e->line);
+        e->line_pos = line_size(e->line);
     } else {
         e->cursor_x = e->line_affinity;
         e->line_pos = e->line_affinity;
