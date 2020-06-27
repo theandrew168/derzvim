@@ -12,10 +12,10 @@
 #include "line.h"
 #include "term.h"
 
-// TODO line wrap
+// TODO page up / page down
+// TODO delete key
 // TODO tabs
 // TODO write back real file
-// TODO lazy loading (how does dirty text work here? mmap or something?) or nah?
 
 int
 main(int argc, char* argv[])

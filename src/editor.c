@@ -22,6 +22,7 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     e->input_fd = input_fd;
     e->output_fd = output_fd;
 
+    e->scroll_x = 0;
     e->scroll_y = 0;
     e->cursor_x = 0;
     e->cursor_y = 0;
@@ -155,20 +156,23 @@ editor_draw(const struct editor* e)
     for (long i = 0; i < e->height - 1; i++) {
         if (line == NULL) break;
         term_cursor_set(e->output_fd, 0, i);
-        term_screen_write(e->output_fd, line->array.buf, MIN(line_size(line), e->width));
+        term_screen_write(e->output_fd,
+            line->array.buf + e->scroll_x,
+            MIN(line_size(line) - e->scroll_x, e->width));
         line = line->next;
     }
 
     // draw the status message
     char status[128] = { 0 };
     snprintf(status, sizeof(status),
-        "-- cx: %3ld | cy: %3ld | lp: %3ld | ls: %3ld | la: %3ld | lc: %3ld --",
+        "-- cx: %3ld | cy: %3ld | lp: %3ld | ls: %3ld | la: %3ld | sx: %3ld | sy %3ld --",
         e->cursor_x,
         e->cursor_y,
         e->line_pos,
         line_size(e->line),
         e->line_affinity,
-        e->line_count);
+        e->scroll_x,
+        e->scroll_y);
     term_cursor_set(e->output_fd, 1, e->height - 1);
     term_screen_write(e->output_fd, status, strlen(status));
 
@@ -213,14 +217,18 @@ editor_rune_insert(struct editor* e, char rune)
 int
 editor_rune_delete(struct editor* e)
 {
-    // TODO: need to handle scrolling in here
     assert(e != NULL);
 
-    if (e->cursor_x == 0 && e->line->prev != NULL) {
+    if (e->line_pos == 0 && e->line->prev != NULL) {
         struct line* prev = e->line->prev;
 
-        // delete NL from prev line
-        e->cursor_x = line_size(prev);
+        // horizontal scrolling?
+        if (e->line_pos >= e->width) {
+            e->scroll_x = e->line_pos - e->width + 1;
+        }
+        e->cursor_x = line_size(prev) - e->scroll_x;
+
+        // move cursor and line values to prev line
         e->line_pos = line_size(prev);
         e->line_affinity = line_size(prev);
 
@@ -240,6 +248,7 @@ editor_rune_delete(struct editor* e)
         e->line_index--;
         e->line_count--;
 
+        // vertical scrolling
         if (e->cursor_y <= 0) {
             e->scroll_y--;
         } else {
@@ -256,7 +265,6 @@ editor_rune_delete(struct editor* e)
 int
 editor_line_break(struct editor* e)
 {
-    // TODO: need to handle scrolling in here
     assert(e != NULL);
 
     struct line* line = calloc(1, sizeof(struct line));
@@ -282,11 +290,14 @@ editor_line_break(struct editor* e)
     e->line_count++;
     e->line_index++;
 
-    // move cursor to the start of the new line
-    e->cursor_x = 0;
     e->line_affinity = 0;
     e->line_pos = 0;
 
+    // horizontal scrolling
+    e->scroll_x = 0;
+    e->cursor_x = 0;
+
+    // vertical scrolling
     if (e->cursor_y >= e->height - 2) {
         e->scroll_y++;
     } else {
@@ -301,8 +312,15 @@ editor_cursor_left(struct editor* e)
 {
     assert(e != NULL);
 
-    if (e->cursor_x <= 0) return EDITOR_OK;
-    e->cursor_x--;
+    // if at start of line, done
+    if (e->line_pos <= 0) return EDITOR_OK;
+
+    if (e->cursor_x <= 0) {
+        e->scroll_x--;
+    } else {
+        e->cursor_x--;
+    }
+
     e->line_pos--;
     e->line_affinity = e->line_pos;
 
@@ -314,9 +332,15 @@ editor_cursor_right(struct editor* e)
 {
     assert(e != NULL);
 
-    if (e->cursor_x >= e->width - 1) return EDITOR_OK;
-    if (e->cursor_x >= line_size(e->line)) return EDITOR_OK;  // will be "- 1" in normal mode
-    e->cursor_x++;
+    // if at end of line, done
+    if (e->line_pos >= line_size(e->line)) return EDITOR_OK;
+
+    if (e->cursor_x >= e->width - 1) {
+        e->scroll_x++;
+    } else {
+        e->cursor_x++;
+    }
+
     e->line_pos++;
     e->line_affinity = e->line_pos;
 
@@ -331,6 +355,7 @@ editor_cursor_up(struct editor* e)
     // if at top of lines, done
     if (e->line->prev == NULL) return EDITOR_OK;
 
+    // vertical scrolling
     if (e->cursor_y <= 0) {
         e->scroll_y--;
     } else {
@@ -343,11 +368,18 @@ editor_cursor_up(struct editor* e)
 
     // handle affinity
     if (e->line_affinity >= line_size(e->line)) {
-        e->cursor_x = line_size(e->line);
+        if (line_size(e->line) >= e->width + e->scroll_x) e->scroll_x = e->line_affinity - e->width + 1;
+        e->cursor_x = line_size(e->line) - e->scroll_x;
         e->line_pos = line_size(e->line);
     } else {
-        e->cursor_x = e->line_affinity;
+        e->cursor_x = e->line_affinity - e->scroll_x;
         e->line_pos = e->line_affinity;
+    }
+
+    // horizontal scrolling
+    if (e->line_pos < e->scroll_x) {
+        e->scroll_x = e->line_pos;
+        e->cursor_x = e->line_pos;
     }
 
     return EDITOR_OK;
@@ -361,7 +393,7 @@ editor_cursor_down(struct editor* e)
     // if at bottom of lines, done
     if (e->line->next == NULL) return EDITOR_OK;  
 
-    // leave a line for the status bar
+    // vertical scrolling
     if (e->cursor_y >= e->height - 2) {
         e->scroll_y++;
     } else {
@@ -374,11 +406,18 @@ editor_cursor_down(struct editor* e)
 
     // handle affinity
     if (e->line_affinity >= line_size(e->line)) {
-        e->cursor_x = line_size(e->line);
+        if (line_size(e->line) >= e->width + e->scroll_x) e->scroll_x = e->line_affinity - e->width + 1;
+        e->cursor_x = line_size(e->line) - e->scroll_x;
         e->line_pos = line_size(e->line);
     } else {
-        e->cursor_x = e->line_affinity;
+        e->cursor_x = e->line_affinity - e->scroll_x;
         e->line_pos = e->line_affinity;
+    }
+
+    // horizontal scrolling
+    if (e->line_pos < e->scroll_x) {
+        e->scroll_x = e->line_pos;
+        e->cursor_x = e->line_pos;
     }
 
     return EDITOR_OK;
@@ -389,6 +428,7 @@ editor_cursor_home(struct editor* e)
 {
     assert(e != NULL);
 
+    e->scroll_x = 0;
     e->cursor_x = 0;
     e->line_pos = 0;
     e->line_affinity = 0;
@@ -401,9 +441,13 @@ editor_cursor_end(struct editor* e)
 {
     assert(e != NULL);
 
-    e->cursor_x = line_size(e->line) - 1;
-    e->line_pos = line_size(e->line) - 1;
-    e->line_affinity = line_size(e->line) - 1;
+    long size = line_size(e->line);
+    if (size >= e->width) {
+        e->scroll_x = size - e->width + 1;
+    }
+    e->cursor_x = MIN(size, e->width - 1);
+    e->line_pos = size;
+    e->line_affinity = size;
 
     return EDITOR_OK;
 }
