@@ -20,7 +20,8 @@ struct editor {
 
     long width;
     long height;
-    long scroll;
+    long scroll_x;
+    long scroll_y;
     long cursor_x;
     long cursor_y;
 

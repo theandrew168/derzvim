@@ -11,6 +11,9 @@
 #include "line.h"
 #include "term.h"
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+
 int
 editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
 {
@@ -19,7 +22,7 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     e->input_fd = input_fd;
     e->output_fd = output_fd;
 
-    e->scroll = 0;
+    e->scroll_y = 0;
     e->cursor_x = 0;
     e->cursor_y = 0;
 
@@ -146,15 +149,14 @@ editor_draw(const struct editor* e)
     struct line* line = e->head;
 
     // skip lines based on scroll value
-    for (long s = e->scroll; s > 0; s--) line = line->next;
+    for (long s = e->scroll_y; s > 0; s--) line = line->next;
 
     // draw the text lines
     for (long i = 0; i < e->height - 1; i++) {
         if (line == NULL) break;
-        term_screen_write(e->output_fd, line->array.buf, line->array.size);
+        term_cursor_set(e->output_fd, 0, i);
+        term_screen_write(e->output_fd, line->array.buf, MIN(line_size(line), e->width));
         line = line->next;
-
-        term_cursor_set(e->output_fd, 0, i + 1);
     }
 
     // draw the status message
@@ -203,9 +205,7 @@ editor_rune_insert(struct editor* e, char rune)
     assert(e != NULL);
 
     line_insert(e->line, e->line_pos, rune);
-    e->cursor_x++;
-    e->line_pos++;
-    e->line_affinity = e->line_pos;
+    editor_cursor_right(e);
 
     return EDITOR_OK;
 }
@@ -220,10 +220,9 @@ editor_rune_delete(struct editor* e)
         struct line* prev = e->line->prev;
 
         // delete NL from prev line
-        e->cursor_x = line_size(prev) - 1;
-        e->line_pos = line_size(prev) - 1;
-        e->line_affinity = line_size(prev) - 1;
-        line_delete(prev, line_size(prev) - 1);
+        e->cursor_x = line_size(prev);
+        e->line_pos = line_size(prev);
+        e->line_affinity = line_size(prev);
 
         // append current line to prev line
         for (long i = 0; i < line_size(e->line); i++) {
@@ -238,9 +237,14 @@ editor_rune_delete(struct editor* e)
         line_free(old);
         free(old);
 
-        e->cursor_y--;
         e->line_index--;
         e->line_count--;
+
+        if (e->cursor_y <= 0) {
+            e->scroll_y--;
+        } else {
+            e->cursor_y--;
+        }
     } else if (e->cursor_x > 0) {
         editor_cursor_left(e);
         line_delete(e->line, e->line_pos);
@@ -280,9 +284,14 @@ editor_line_break(struct editor* e)
 
     // move cursor to the start of the new line
     e->cursor_x = 0;
-    e->cursor_y++;
     e->line_affinity = 0;
     e->line_pos = 0;
+
+    if (e->cursor_y >= e->height - 2) {
+        e->scroll_y++;
+    } else {
+        e->cursor_y++;
+    }
 
     return EDITOR_OK;
 }
@@ -323,7 +332,7 @@ editor_cursor_up(struct editor* e)
     if (e->line->prev == NULL) return EDITOR_OK;
 
     if (e->cursor_y <= 0) {
-        e->scroll--;
+        e->scroll_y--;
     } else {
         e->cursor_y--;
     }
@@ -354,7 +363,7 @@ editor_cursor_down(struct editor* e)
 
     // leave a line for the status bar
     if (e->cursor_y >= e->height - 2) {
-        e->scroll++;
+        e->scroll_y++;
     } else {
         e->cursor_y++;
     }
