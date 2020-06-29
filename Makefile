@@ -15,16 +15,14 @@ default: derzvim
 all: libderzvim.a libderzvim.so derzvim derzvim_tests
 
 libderzvim_sources =  \
-  src/array.c         \
   src/editor.c        \
   src/line.c          \
   src/term.c
 libderzvim_objects = $(libderzvim_sources:.c=.o)
 
-src/array.o: src/array.c src/array.h
-src/editor.o: src/editor.c src/editor.h src/array.h src/line.h src/term.h
-src/line.o: src/line.c src/line.h src/array.h
-src/term.o: src/term.c src/term.h src/array.h
+src/editor.o: src/editor.c src/editor.h src/line.h src/term.h
+src/line.o: src/line.c src/line.h
+src/term.o: src/term.c src/term.h
 
 libderzvim.a: $(libderzvim_objects)
 	@echo "STATIC  $@"
@@ -38,8 +36,7 @@ derzvim: src/main.c libderzvim.a
 	@echo "EXE     $@"
 	@$(CC) $(CFLAGS) $(LDFLAGS) -o $@ src/main.c libderzvim.a $(LDLIBS)
 
-derzvim_tests_sources =  \
-  src/array_test.c
+derzvim_tests_sources =
 
 derzvim_tests: $(derzvim_tests_sources) src/main_test.c libderzvim.a
 	@echo "EXE     $@"

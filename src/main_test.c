@@ -2,12 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "array_test.c"
-
 typedef bool(*test_func)(void);
 
+bool test_foo(void) { return true; }
+bool test_bar(void) { return false; }
+
 static const test_func TESTS[] = {
-    test_array_insert,
+    test_foo,
+    test_bar,
 };
 
 int

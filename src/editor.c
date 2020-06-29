@@ -6,7 +6,6 @@
 
 #include <termios.h>
 
-#include "array.h"
 #include "editor.h"
 #include "line.h"
 #include "term.h"
@@ -63,7 +62,7 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
             if (c == '\n') {
                 newline = true;
             } else {
-                array_append(&e->tail->array, c);
+                line_append(e->tail, c);
             }
         }
 
@@ -117,7 +116,7 @@ editor_free(struct editor* e)
         fprintf(stderr, "skipping writing output file\n");
     } else {
         for (struct line* line = e->head; line != NULL; line = line->next) {
-            fwrite(line->array.buf, line->array.size, 1, fp);
+            fwrite(line->buf, line->size, 1, fp);
             fputc('\n', fp);
         }
         fclose(fp);
@@ -157,8 +156,8 @@ editor_draw(const struct editor* e)
         if (line == NULL) break;
         term_cursor_set(e->output_fd, 0, i);
         term_screen_write(e->output_fd,
-            line->array.buf + e->scroll_x,
-            MIN(line_size(line) - e->scroll_x, e->width));
+            line->buf + e->scroll_x,
+            MIN(line->size - e->scroll_x, e->width));
         line = line->next;
     }
 
@@ -169,7 +168,7 @@ editor_draw(const struct editor* e)
         e->cursor_x,
         e->cursor_y,
         e->line_pos,
-        line_size(e->line),
+        e->line->size,
         e->line_affinity,
         e->scroll_x,
         e->scroll_y);
@@ -226,14 +225,14 @@ editor_rune_delete(struct editor* e)
         if (e->line_pos >= e->width) {
             e->scroll_x = e->line_pos - e->width + 1;
         }
-        e->cursor_x = line_size(prev) - e->scroll_x;
+        e->cursor_x = prev->size - e->scroll_x;
 
         // move cursor and line values to prev line
-        e->line_pos = line_size(prev);
-        e->line_affinity = line_size(prev);
+        e->line_pos = prev->size;
+        e->line_affinity = prev->size;
 
         // append current line to prev line
-        for (long i = 0; i < line_size(e->line); i++) {
+        for (long i = 0; i < e->line->size; i++) {
             line_append(prev, line_get(e->line, i));
         }
 
@@ -271,12 +270,12 @@ editor_line_break(struct editor* e)
     line_init(line);
 
     // copy rest of existing line to the new one
-    for (long i = e->line_pos; i < line_size(e->line); i++) {
+    for (long i = e->line_pos; i < e->line->size; i++) {
         line_append(line, line_get(e->line, i));
     }
 
     // delete rest of existing line and replace the NL
-    for (long i = line_size(e->line) - 1; i >= e->line_pos; i--) {
+    for (long i = e->line->size - 1; i >= e->line_pos; i--) {
         line_delete(e->line, i);
     }
 
@@ -333,7 +332,7 @@ editor_cursor_right(struct editor* e)
     assert(e != NULL);
 
     // if at end of line, done
-    if (e->line_pos >= line_size(e->line)) return EDITOR_OK;
+    if (e->line_pos >= e->line->size) return EDITOR_OK;
 
     if (e->cursor_x >= e->width - 1) {
         e->scroll_x++;
@@ -363,14 +362,14 @@ editor_cursor_up(struct editor* e)
     }
 
     // move to the prev line
-    e->line = line_prev(e->line);
+    e->line = e->line->prev;
     e->line_index--;
 
     // handle affinity
-    if (e->line_affinity >= line_size(e->line)) {
-        if (line_size(e->line) >= e->width + e->scroll_x) e->scroll_x = e->line_affinity - e->width + 1;
-        e->cursor_x = line_size(e->line) - e->scroll_x;
-        e->line_pos = line_size(e->line);
+    if (e->line_affinity >= e->line->size) {
+        if (e->line->size >= e->width + e->scroll_x) e->scroll_x = e->line_affinity - e->width + 1;
+        e->cursor_x = e->line->size - e->scroll_x;
+        e->line_pos = e->line->size;
     } else {
         e->cursor_x = e->line_affinity - e->scroll_x;
         e->line_pos = e->line_affinity;
@@ -405,10 +404,10 @@ editor_cursor_down(struct editor* e)
     e->line_index++;
 
     // handle affinity
-    if (e->line_affinity >= line_size(e->line)) {
-        if (line_size(e->line) >= e->width + e->scroll_x) e->scroll_x = e->line_affinity - e->width + 1;
-        e->cursor_x = line_size(e->line) - e->scroll_x;
-        e->line_pos = line_size(e->line);
+    if (e->line_affinity >= e->line->size) {
+        if (e->line->size >= e->width + e->scroll_x) e->scroll_x = e->line_affinity - e->width + 1;
+        e->cursor_x = e->line->size - e->scroll_x;
+        e->line_pos = e->line->size;
     } else {
         e->cursor_x = e->line_affinity - e->scroll_x;
         e->line_pos = e->line_affinity;
@@ -441,7 +440,7 @@ editor_cursor_end(struct editor* e)
 {
     assert(e != NULL);
 
-    long size = line_size(e->line);
+    long size = e->line->size;
     if (size >= e->width) {
         e->scroll_x = size - e->width + 1;
     }

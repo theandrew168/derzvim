@@ -8,7 +8,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "array.h"
 #include "term.h"
 
 // TODO: are these valid VT100 codes?

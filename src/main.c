@@ -7,7 +7,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "array.h"
 #include "editor.h"
 #include "line.h"
 #include "term.h"
