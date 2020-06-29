@@ -38,40 +38,7 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     e->line_pos = 0;
 
     if (path != NULL) {
-        FILE* fp = fopen(path, "r");
-        if (fp == NULL) {
-            fprintf(stderr, "failed to open file: %s\n", path);
-            return EDITOR_ERROR;
-        }
-
-        // read through each character in the file
-        int c = 0;
-        bool newline = false;
-        while ((c = fgetc(fp)) != EOF) {
-            if (newline) {
-                struct line* line = calloc(1, sizeof(struct line));
-                line_init(line);
-                line->prev = e->tail;
-                e->tail->next = line;
-                e->tail = line;
-
-                newline = false;
-                e->line_count++;
-            }
-            // add a new line to the DLL when found
-            if (c == '\n') {
-                newline = true;
-            } else {
-                line_append(e->tail, c);
-            }
-        }
-
-        if (ferror(fp)) {
-            fprintf(stderr, "IO error while reading file: %s\n", path);
-            return EDITOR_ERROR;
-        }
-
-        fclose(fp);
+        lines_init(&e->head, &e->tail, &e->line_count, path);
     }
 
     term_cursor_save(e->output_fd);
@@ -110,26 +77,10 @@ editor_free(struct editor* e)
     term_cursor_restore(e->output_fd);
 
     // write the output.txt file
-    FILE* fp = fopen("output.txt", "w");
-    if (fp == NULL) {
-        fprintf(stderr, "failed to open output file: output.txt\n");
-        fprintf(stderr, "skipping writing output file\n");
-    } else {
-        for (struct line* line = e->head; line != NULL; line = line->next) {
-            fwrite(line->buf, line->size, 1, fp);
-            fputc('\n', fp);
-        }
-        fclose(fp);
-    }
+    lines_write(e->head, "output.txt");
 
     // free the DLL of lines
-    struct line* line = e->head;
-    while (line != NULL) {
-        struct line* current = line;
-        line = line->next;
-        line_free(current);
-        free(current);
-    }
+    lines_free(&e->head, &e->tail);
 
     return EDITOR_OK;
 }
@@ -231,18 +182,9 @@ editor_rune_delete(struct editor* e)
         }
         e->cursor_x = prev->size - e->scroll_x;
 
-        // append current line to prev line
-        for (long i = 0; i < e->line->size; i++) {
-            line_append(prev, line_get(e->line, i));
-        }
-
-        // unlink and delete the current line
-        struct line* old = e->line;
-        if (e->line->next != NULL) e->line->next->prev = e->line->prev;
-        e->line->prev->next = e->line->next;
+        // move back a line and merge the two
         e->line = e->line->prev;
-        line_free(old);
-        free(old);
+        line_merge(e->line, e->line->next);
 
         e->line_index--;
         e->line_count--;
@@ -266,26 +208,9 @@ editor_line_break(struct editor* e)
 {
     assert(e != NULL);
 
-    struct line* line = calloc(1, sizeof(struct line));
-    line_init(line);
+    line_break(e->line, e->line_pos);
 
-    // copy rest of existing line to the new one
-    for (long i = e->line_pos; i < e->line->size; i++) {
-        line_append(line, line_get(e->line, i));
-    }
-
-    // delete rest of existing line and replace the NL
-    for (long i = e->line->size - 1; i >= e->line_pos; i--) {
-        line_delete(e->line, i);
-    }
-
-    // link the new line in
-    line->prev = e->line;
-    line->next = e->line->next;
-    if (e->line->next != NULL) e->line->next->prev = line;
-    e->line->next = line;
-
-    e->line = line;
+    e->line = e->line->next;
     e->line_count++;
     e->line_index++;
 

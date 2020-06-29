@@ -22,8 +22,12 @@ int line_append(struct line* line, char c);
 int line_insert(struct line* line, long pos, char c);
 int line_delete(struct line* line, long pos);
 
-// TODO: get head and tail from a FILE* ?
-// TODO: serialize head into a FILE* ?
-// TODO: extra helper stuff like split / join?
+int line_break(struct line* line, long pos);
+int line_merge(struct line* dest, struct line* src);
+
+int lines_init(struct line** head, struct line** tail, long* count, const char* path);
+int lines_free(struct line** head, struct line** tail);
+
+int lines_write(const struct line* head, const char* path);
 
 #endif
