@@ -50,6 +50,7 @@ check: derzvim_tests
 .PHONY: install
 install: derzvim
 	mkdir -p $(PREFIX)/bin
+	strip derzvim
 	install -m 755 derzvim $(PREFIX)/bin
 
 .PHONY: clean
