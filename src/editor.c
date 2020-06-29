@@ -221,15 +221,15 @@ editor_rune_delete(struct editor* e)
     if (e->line_pos == 0 && e->line->prev != NULL) {
         struct line* prev = e->line->prev;
 
-        // horizontal scrolling?
-        if (e->line_pos >= e->width) {
-            e->scroll_x = e->line_pos - e->width + 1;
-        }
-        e->cursor_x = prev->size - e->scroll_x;
-
         // move cursor and line values to prev line
         e->line_pos = prev->size;
         e->line_affinity = prev->size;
+
+        // horizontal scrolling?
+        if (e->line_pos >= e->width) {
+            e->scroll_x = e->line_pos - (e->width / 2);
+        }
+        e->cursor_x = prev->size - e->scroll_x;
 
         // append current line to prev line
         for (long i = 0; i < e->line->size; i++) {
@@ -377,7 +377,7 @@ editor_cursor_up(struct editor* e)
 
     // horizontal scrolling
     if (e->line_pos < e->scroll_x) {
-        e->scroll_x = e->line_pos;
+        e->scroll_x = MAX(e->line_pos - e->width, 0);
         e->cursor_x = e->line_pos;
     }
 
@@ -415,7 +415,7 @@ editor_cursor_down(struct editor* e)
 
     // horizontal scrolling
     if (e->line_pos < e->scroll_x) {
-        e->scroll_x = e->line_pos;
+        e->scroll_x = MAX(e->line_pos - e->width, 0);
         e->cursor_x = e->line_pos;
     }
 
