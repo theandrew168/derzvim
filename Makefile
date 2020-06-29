@@ -7,9 +7,10 @@ CFLAGS  = -std=c99 -D_POSIX_C_SOURCE=200809L
 CFLAGS += -fPIC -g -Og
 CFLAGS += -Wall -Wextra -Wpedantic
 CFLAGS += -Wno-unused
-CFLAGS += -Isrc/
+CFLAGS += -Isrc/ -I/usr/include/lua5.1
 LDFLAGS =
-LDLIBS  =
+LDLIBS  = -llua5.1
+PREFIX  = /usr/local
 
 default: derzvim
 all: libderzvim.a libderzvim.so derzvim derzvim_tests
@@ -42,13 +43,14 @@ derzvim_tests: $(derzvim_tests_sources) src/main_test.c libderzvim.a
 	@echo "EXE     $@"
 	@$(CC) $(CFLAGS) -o $@ src/main_test.c libderzvim.a
 
-.PHONY: run
-run: derzvim
-	./derzvim
-
 .PHONY: check
 check: derzvim_tests
 	./derzvim_tests
+
+.PHONY: install
+install: derzvim
+	mkdir -p $(PREFIX)/bin
+	install -m 755 derzvim $(PREFIX)/bin
 
 .PHONY: clean
 clean:
