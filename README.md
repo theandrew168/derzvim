@@ -27,3 +27,4 @@ sudo make PREFIX=/usr install
 ## References
 [Antirez's Kilo Editor](https://github.com/antirez/kilo)  
 [Termios Manual Page](https://man7.org/linux/man-pages/man3/termios.3.html)  
+[VT100 Escape Sequences](http://ascii-table.com/ansi-escape-sequences-vt-100.php)  
