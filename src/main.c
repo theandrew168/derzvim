@@ -11,7 +11,6 @@
 #include "line.h"
 #include "term.h"
 
-// TODO page up / page down
 // TODO delete key
 // TODO tabs
 // TODO write back real file
@@ -77,6 +76,7 @@ main(int argc, char* argv[])
             case KEY_BACKSPACE:
                 editor_rune_delete(&e);
                 break;
+            // TODO: handle this in a less naive way
             case '\t':
                 editor_rune_insert(&e, ' ');
                 editor_rune_insert(&e, ' ');
