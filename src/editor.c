@@ -380,6 +380,11 @@ int
 editor_cursor_page_up(struct editor* e)
 {
     assert(e != NULL);
+
+    for (long i = 0; i < e->height - 1; i++) {
+        editor_cursor_up(e);
+    }
+
     return EDITOR_OK;
 }
 
@@ -387,5 +392,10 @@ int
 editor_cursor_page_down(struct editor* e)
 {
     assert(e != NULL);
+
+    for (long i = 0; i < e->height - 1; i++) {
+        editor_cursor_down(e);
+    }
+
     return EDITOR_OK;
 }

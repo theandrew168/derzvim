@@ -65,11 +65,23 @@ main(int argc, char* argv[])
             case KEY_END:
                 editor_cursor_end(&e);
                 break;
+            case KEY_PAGE_UP:
+                editor_cursor_page_up(&e);
+                break;
+            case KEY_PAGE_DOWN:
+                editor_cursor_page_down(&e);
+                break;
             case KEY_ENTER:
                 editor_line_break(&e);
                 break;
             case KEY_BACKSPACE:
                 editor_rune_delete(&e);
+                break;
+            case '\t':
+                editor_rune_insert(&e, ' ');
+                editor_rune_insert(&e, ' ');
+                editor_rune_insert(&e, ' ');
+                editor_rune_insert(&e, ' ');
                 break;
             default:
                 if (c < 32 || c > 126) break;

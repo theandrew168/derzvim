@@ -98,7 +98,7 @@ line_break(struct line* line, long pos)
 {
     assert(line != NULL);
     assert(pos >= 0);
-    assert(pos < line->size);
+    assert(pos <= line->size);
 
     struct line* new = calloc(1, sizeof(struct line));
     line_init(new);
@@ -174,6 +174,11 @@ lines_init(struct line** head, struct line** tail, long* count, const char* path
         // only add a line if text comes after the NL (handles trailing NL)
         if (c == '\n') {
             newline = true;
+        } else if (c == '\t') {
+            line_append(*tail, ' ');
+            line_append(*tail, ' ');
+            line_append(*tail, ' ');
+            line_append(*tail, ' ');
         } else {
             line_append(*tail, c);
         }
