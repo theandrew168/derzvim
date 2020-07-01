@@ -29,73 +29,68 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-        editor_draw(&e);
-    bool running = true;
-    while (running) {
-        // draw current editor state to the terminal
-        //editor_draw(&e);
+    while (editor_run(&e));
 
-        // wait for input
-        int c = 0;
-        if (editor_key_wait(&e, &c) != EDITOR_OK) {
-            editor_free(&e);
-            return EXIT_FAILURE;
-        }
-
-        // process the input
-        switch (c) {
-            case CTRL_KEY('q'):
-                running = false;
-                break;
-            case KEY_ARROW_LEFT:
-                editor_cursor_left(&e);
-                break;
-            case KEY_ARROW_RIGHT:
-                editor_cursor_right(&e);
-                break;
-            case KEY_ARROW_UP:
-                editor_cursor_up(&e);
-                break;
-            case KEY_ARROW_DOWN:
-                editor_cursor_down(&e);
-                break;
-            case KEY_HOME:
-                editor_cursor_home(&e);
-                break;
-            case KEY_END:
-                editor_cursor_end(&e);
-                break;
-            case KEY_PAGE_UP:
-                editor_cursor_page_up(&e);
-                break;
-            case KEY_PAGE_DOWN:
-                editor_cursor_page_down(&e);
-                break;
-            case KEY_ENTER:
-                editor_line_break(&e);
-                break;
-            case KEY_BACKSPACE:
-                editor_rune_delete(&e);
-                break;
-            case CTRL_KEY('o'):
-                term_screen_scroll_up(STDOUT_FILENO);
-                break;
-            case CTRL_KEY('l'):
-                term_screen_scroll_down(STDOUT_FILENO);
-                break;
-            // TODO: handle this in a less naive way
-            case '\t':
-                editor_rune_insert(&e, ' ');
-                editor_rune_insert(&e, ' ');
-                editor_rune_insert(&e, ' ');
-                editor_rune_insert(&e, ' ');
-                break;
-            default:
-                if (c < 32 || c > 126) break;
-                editor_rune_insert(&e, c);
-                break;
-        }
-    }
+//    bool running = true;
+//    while (running) {
+//        // draw current editor state to the terminal
+//        editor_draw(&e);
+//
+//        // wait for input
+//        int c = 0;
+//        if (editor_key_wait(&e, &c) != EDITOR_OK) {
+//            editor_free(&e);
+//            return EXIT_FAILURE;
+//        }
+//
+//        // process the input
+//        switch (c) {
+//            case CTRL_KEY('q'):
+//                running = false;
+//                break;
+//            case KEY_ARROW_LEFT:
+//                editor_cursor_left(&e);
+//                break;
+//            case KEY_ARROW_RIGHT:
+//                editor_cursor_right(&e);
+//                break;
+//            case KEY_ARROW_UP:
+//                editor_cursor_up(&e);
+//                break;
+//            case KEY_ARROW_DOWN:
+//                editor_cursor_down(&e);
+//                break;
+//            case KEY_HOME:
+//                editor_cursor_home(&e);
+//                break;
+//            case KEY_END:
+//                editor_cursor_end(&e);
+//                break;
+//            case KEY_PAGE_UP:
+//                editor_cursor_page_up(&e);
+//                break;
+//            case KEY_PAGE_DOWN:
+//                editor_cursor_page_down(&e);
+//                break;
+//            case KEY_ENTER:
+//                editor_line_break(&e);
+//                break;
+//            case KEY_BACKSPACE:
+//                editor_rune_delete(&e);
+//                break;
+//            // TODO: handle this in a less naive way
+//            case '\t':
+//                editor_rune_insert(&e, ' ');
+//                editor_rune_insert(&e, ' ');
+//                editor_rune_insert(&e, ' ');
+//                editor_rune_insert(&e, ' ');
+//                break;
+//            default:
+//                if (c < 32 || c > 126) break;
+//                editor_rune_insert(&e, c);
+//                break;
+//        }
+//    }
 
     editor_free(&e);
     return EXIT_SUCCESS;

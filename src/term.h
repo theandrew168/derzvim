@@ -21,27 +21,39 @@ enum key {
     KEY_DEL,
 };
 
-bool term_size(int output_fd, long* width, long* height);
 bool term_mode_raw(int input_fd);
+bool term_mode_newline(int output_fd);
+bool term_mode_linefeed(int output_fd);
 
-bool term_screen_save(int output_fd);
-bool term_screen_restore(int output_fd);
-bool term_screen_clear(int output_fd);
-bool term_screen_write(int output_fd, char* buf, long size);
+bool term_line_wrap_on(int output_fd);
+bool term_line_wrap_off(int output_fd);
 
-bool term_screen_scroll_up(int output_fd);
-bool term_screen_scroll_down(int output_fd);
+bool term_scroll_smooth(int output_fd);
+bool term_scroll_jump(int output_fd);
+bool term_scroll_region_set(int output_fd, long top, long bottom);
+bool term_scroll_region_on(int output_fd);
+bool term_scroll_region_off(int output_fd);
 
-bool term_row_clear(int output_fd);
-
+bool term_cursor_up(int output_fd, long n, bool scroll);
+bool term_cursor_down(int output_fd, long n, bool scroll);
+bool term_cursor_right(int output_fd, long n);
+bool term_cursor_left(int output_fd, long n);
+bool term_cursor_pos_set(int output_fd, long cx, long cy);
+bool term_cursor_pos_home(int output_fd);
+bool term_cursor_next_line(int output_fd);
 bool term_cursor_save(int output_fd);
 bool term_cursor_restore(int output_fd);
-//bool term_cursor_get(int input_fd, int output_fd, long* cx, long* cy);
-bool term_cursor_set(int output_fd, long cx, long cy);
-bool term_cursor_reset(int output_fd);
-bool term_cursor_hide(int output_fd);
-bool term_cursor_show(int output_fd);
 
+bool term_erase_line_after(int output_fd);
+bool term_erase_line_before(int output_fd);
+bool term_erase_line(int output_fd);
+bool term_erase_screen_after(int output_fd);
+bool term_erase_screen_before(int output_fd);
+bool term_erase_screen(int output_fd);
+
+bool term_screen_write(int output_fd, char* buf, long size);
+
+bool term_size(int output_fd, long* width, long* height);
 bool term_key_wait(int input_fd, int* c);
 
 #endif

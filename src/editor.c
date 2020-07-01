@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,7 +43,6 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     }
 
     term_cursor_save(e->output_fd);
-    term_screen_save(e->output_fd);
 
     // capture original termios config to restore upon exit
     if (tcgetattr(input_fd, &e->original_termios) == -1) {
@@ -61,6 +61,17 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
         return EDITOR_ERROR;
     }
 
+    // initialize a blank screen
+    term_erase_screen(e->output_fd);
+    term_cursor_pos_home(e->output_fd);
+
+    term_scroll_smooth(e->output_fd);
+    term_scroll_region_set(e->output_fd, 0, e->height - 1);
+    term_scroll_region_on(e->output_fd);
+
+//    term_mode_linefeed(e->output_fd);
+//    term_line_wrap_on(e->output_fd);
+
     return EDITOR_OK;
 }
 
@@ -72,9 +83,10 @@ editor_free(struct editor* e)
     // restore original termios config
     tcsetattr(e->input_fd, TCSAFLUSH, &e->original_termios);
 
-    // restore the terminal before exiting
-    term_screen_restore(e->output_fd);
-    term_cursor_restore(e->output_fd);
+    // restore screen and cursor upon exit
+    term_erase_screen(e->output_fd);
+//    term_cursor_restore(e->output_fd);
+    term_scroll_region_off(e->output_fd);
 
     // write the output.txt file
     lines_write(e->head, "output.txt");
@@ -85,59 +97,147 @@ editor_free(struct editor* e)
     return EDITOR_OK;
 }
 
-int
-editor_draw(const struct editor* e)
+bool
+editor_run(struct editor* e)
 {
-    assert(e != NULL);
-
-    // TODO optimize this to not redraw everything upon every key input
-    // thats probs too slow. its def inefficient
-    term_screen_clear(e->output_fd);
-    term_cursor_reset(e->output_fd);
-    term_cursor_hide(e->output_fd);
-
-    // this is our iterator
-    struct line* line = e->head;
-
-    // skip lines based on scroll value
-    for (long s = e->scroll_y; s > 0; s--) line = line->next;
-
-    // draw the text lines
-    for (long i = 0; i < e->height - 1; i++) {
-        if (line == NULL) break;
-        term_cursor_set(e->output_fd, 0, i);
-        term_screen_write(e->output_fd,
-            line->buf + e->scroll_x,
-            MIN(line->size - e->scroll_x, e->width));
-        line = line->next;
-    }
+    term_cursor_save(e->output_fd);
+    term_scroll_region_off(e->output_fd);
 
     // draw the status message
     char status[128] = { 0 };
     snprintf(status, sizeof(status),
-        "-- cx: %3ld | cy: %3ld | lp: %3ld | ls: %3ld | la: %3ld | sx: %3ld | sy %3ld --",
-        e->cursor_x,
-        e->cursor_y,
+        "-- li: %3ld | lp: %3ld | ls: %3ld | lo: %3ld | la: %3ld --",
+        e->line_index,
         e->line_pos,
         e->line->size,
-        e->line_affinity,
-        e->scroll_x,
-        e->scroll_y);
-    term_cursor_set(e->output_fd, 1, e->height - 1);
+        e->line->size / e->width + 1,
+        e->line_affinity);
+    term_cursor_pos_set(e->output_fd, 1, e->height - 1);
     term_screen_write(e->output_fd, status, strlen(status));
 
     // draw the cursor pos indicator
     char curpos[64] = { 0 };
     long curpos_size = snprintf(curpos, sizeof(curpos),
         "%8ld,%-8ld", e->line_index + 1, e->line_pos + 1);
-    term_cursor_set(e->output_fd, e->width - curpos_size - 1, e->height - 1);
+    term_cursor_pos_set(e->output_fd, e->width - curpos_size - 1, e->height - 1);
     term_screen_write(e->output_fd, curpos, strlen(curpos));
 
-    term_cursor_set(e->output_fd, e->cursor_x, e->cursor_y);
-    term_cursor_show(e->output_fd);
+    term_scroll_region_on(e->output_fd);
+    term_cursor_restore(e->output_fd);
 
-    return EDITOR_OK;
+    int c = 0;
+    if (!term_key_wait(e->input_fd, &c)) return false;
+
+    switch (c) {
+        case CTRL_KEY('q'):
+            return false;
+        case KEY_ARROW_UP:
+            if (e->line_index <= 0) break;
+            term_cursor_up(e->output_fd, 1, true);
+            e->line = e->line->prev;
+            e->line_index--;
+            break;
+        case KEY_ARROW_DOWN:
+            if (e->line_index >= e->line_count - 1) break;
+            term_cursor_down(e->output_fd, 1, true);
+            e->line = e->line->next;
+            e->line_index++;
+            break;
+        case KEY_ARROW_LEFT:
+            if (e->line_pos <= 0) break;
+            term_cursor_left(e->output_fd, 1);
+            e->line_pos--;
+            break;
+        case KEY_ARROW_RIGHT:
+            if (e->line_pos >= e->line->size) break;
+            term_cursor_right(e->output_fd, 1);
+            e->line_pos++;
+            break;
+        case KEY_ENTER:
+            line_break(e->line, e->line_pos);
+            e->line = e->line->next;
+            e->line_count++;
+            e->line_index++;
+
+            term_erase_line_after(e->output_fd);
+            term_cursor_next_line(e->output_fd);
+            term_screen_write(e->output_fd, e->line->buf, e->line->size);
+            term_cursor_left(e->output_fd, e->line->size);
+
+            e->line_affinity = 0;
+            e->line_pos = 0;
+            break;
+        default:
+            if (c < 32 || c > 126) break;
+            term_screen_write(e->output_fd, (char*)&c, 1);
+            line_insert(e->line, e->line_pos, c);
+            e->line_pos++;
+            // messing with line wrap here
+            if (e->line_pos % e->width == 0) {
+                long occupation = e->line->size / e->width + 1;
+                term_cursor_next_line(e->output_fd);
+                term_scroll_region_set(e->output_fd, e->line_index + occupation, e->height - 1);
+                term_cursor_up(e->output_fd, 1, true);
+                term_scroll_region_set(e->output_fd, 0, e->height - 1);
+                term_cursor_down(e->output_fd, occupation, true);
+            }
+            break;
+    }
+
+    return true;
 }
+
+//int
+//editor_draw(const struct editor* e)
+//{
+//    assert(e != NULL);
+//
+//    // TODO optimize this to not redraw everything upon every key input
+//    // thats probs too slow. its def inefficient
+//    term_erase_screen(e->output_fd);
+//    term_cursor_pos_home(e->output_fd);
+//
+//    // this is our iterator
+//    struct line* line = e->head;
+//
+//    // skip lines based on scroll value
+//    for (long s = e->scroll_y; s > 0; s--) line = line->next;
+//
+//    // draw the text lines
+//    for (long i = 0; i < e->height - 1; i++) {
+//        if (line == NULL) break;
+//        term_cursor_pos_set(e->output_fd, 0, i);
+//        term_screen_write(e->output_fd,
+//            line->buf + e->scroll_x,
+//            MIN(line->size - e->scroll_x, e->width));
+//        line = line->next;
+//    }
+//
+//    // draw the status message
+//    char status[128] = { 0 };
+//    snprintf(status, sizeof(status),
+//        "-- cx: %3ld | cy: %3ld | lp: %3ld | ls: %3ld | la: %3ld | sx: %3ld | sy %3ld --",
+//        e->cursor_x,
+//        e->cursor_y,
+//        e->line_pos,
+//        e->line->size,
+//        e->line_affinity,
+//        e->scroll_x,
+//        e->scroll_y);
+//    term_cursor_pos_set(e->output_fd, 1, e->height - 1);
+//    term_screen_write(e->output_fd, status, strlen(status));
+//
+//    // draw the cursor pos indicator
+//    char curpos[64] = { 0 };
+//    long curpos_size = snprintf(curpos, sizeof(curpos),
+//        "%8ld,%-8ld", e->line_index + 1, e->line_pos + 1);
+//    term_cursor_pos_set(e->output_fd, e->width - curpos_size - 1, e->height - 1);
+//    term_screen_write(e->output_fd, curpos, strlen(curpos));
+//
+//    term_cursor_pos_set(e->output_fd, e->cursor_x, e->cursor_y);
+//
+//    return EDITOR_OK;
+//}
 
 int
 editor_key_wait(const struct editor* e, int* c)
