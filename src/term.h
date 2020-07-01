@@ -29,6 +29,9 @@ bool term_screen_restore(int output_fd);
 bool term_screen_clear(int output_fd);
 bool term_screen_write(int output_fd, char* buf, long size);
 
+bool term_screen_scroll_up(int output_fd);
+bool term_screen_scroll_down(int output_fd);
+
 bool term_row_clear(int output_fd);
 
 bool term_cursor_save(int output_fd);

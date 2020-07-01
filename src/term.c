@@ -10,11 +10,16 @@
 
 #include "term.h"
 
+// http://braun-home.net/michael/info/misc/VT100_commands.htm
+
 // TODO: are these valid VT100 codes?
 #define TERM_SCREEN_SAVE    "\x1b[?47h"
 #define TERM_SCREEN_RESTORE "\x1b[?47l"
 #define TERM_CURSOR_SAVE    "\x1b" "7"
 #define TERM_CURSOR_RESTORE "\x1b" "8"
+
+#define TERM_SCREEN_SCROLL_UP   "\x1b" "M"
+#define TERM_SCREEN_SCROLL_DOWN "\x1b" "D"
 
 #define TERM_SCREEN_CLEAR "\x1b[2J"
 #define TERM_CURSOR_RESET "\x1b[H"
@@ -85,6 +90,22 @@ bool
 term_screen_write(int output_fd, char* buf, long size)
 {
     if (write(output_fd, buf, size) != size) return false;
+    return true;
+}
+
+bool
+term_screen_scroll_up(int output_fd)
+{
+    long size = strlen(TERM_SCREEN_SCROLL_UP);
+    if (write(output_fd, TERM_SCREEN_SCROLL_UP, size) != size) return false;
+    return true;
+}
+
+bool
+term_screen_scroll_down(int output_fd)
+{
+    long size = strlen(TERM_SCREEN_SCROLL_DOWN);
+    if (write(output_fd, TERM_SCREEN_SCROLL_DOWN, size) != size) return false;
     return true;
 }
 

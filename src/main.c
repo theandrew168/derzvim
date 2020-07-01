@@ -29,10 +29,11 @@ main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+        editor_draw(&e);
     bool running = true;
     while (running) {
         // draw current editor state to the terminal
-        editor_draw(&e);
+        //editor_draw(&e);
 
         // wait for input
         int c = 0;
@@ -75,6 +76,12 @@ main(int argc, char* argv[])
                 break;
             case KEY_BACKSPACE:
                 editor_rune_delete(&e);
+                break;
+            case CTRL_KEY('o'):
+                term_screen_scroll_up(STDOUT_FILENO);
+                break;
+            case CTRL_KEY('l'):
+                term_screen_scroll_down(STDOUT_FILENO);
                 break;
             // TODO: handle this in a less naive way
             case '\t':
