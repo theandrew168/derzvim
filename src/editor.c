@@ -14,6 +14,42 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+static void
+term_cursor_pos_set_x(int output_fd, long cx)
+{
+    term_cursor_next_line(output_fd);
+    term_cursor_up(output_fd, 1, false);
+    term_cursor_right(output_fd, cx);
+}
+
+static void
+term_scroll_region_up(struct editor* e, long top, long bottom, long n)
+{
+    term_cursor_save(e->output_fd);
+
+    // cursor pos within a region is relative to the region itself
+    term_scroll_region_set(e->output_fd, top, bottom);
+    term_cursor_pos_set(e->output_fd, 0, e->height);
+    term_cursor_down(e->output_fd, n, true);
+
+    term_scroll_region_set(e->output_fd, 0, e->height - 2);
+    term_cursor_restore(e->output_fd);
+}
+
+static void
+term_scroll_region_down(struct editor* e, long top, long bottom, long n)
+{
+    term_cursor_save(e->output_fd);
+
+    // cursor pos within a region is relative to the region itself
+    term_scroll_region_set(e->output_fd, top, bottom);
+    term_cursor_pos_set(e->output_fd, 0, 0);
+    term_cursor_up(e->output_fd, n, true);
+
+    term_scroll_region_set(e->output_fd, 0, e->height - 2);
+    term_cursor_restore(e->output_fd);
+}
+
 int
 editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
 {
@@ -64,6 +100,16 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     term_scroll_smooth(e->output_fd);
     term_scroll_region_set(e->output_fd, 0, e->height - 2);
     term_scroll_region_on(e->output_fd);
+
+    // draw the initial file contents
+    long count = 0;
+    for (struct line* line = e->head; line != NULL; line = line->next) {
+        if (count >= e->height - 2) break;
+        term_screen_write(e->output_fd, line->buf, line->size);
+        term_cursor_next_line(e->output_fd);
+        count++;
+    }
+    term_cursor_pos_home(e->output_fd);
 
     return EDITOR_OK;
 }
@@ -161,13 +207,24 @@ editor_run(struct editor* e)
             e->line_pos++;
             e->line_affinity = e->line_pos;
             break;
+        case KEY_HOME:
+            e->line_pos = 0;
+            e->line_affinity = 0;
+            term_cursor_pos_set_x(e->output_fd, 0);
+            break;
+        case KEY_END:
+            // TODO: horiz scroll
+            e->line_pos = e->line->size;
+            e->line_affinity = e->line->size;
+            term_cursor_pos_set_x(e->output_fd, e->line_pos);
+            break;
         case KEY_ENTER: {
             // break the current line
             line_break(e->line, e->line_pos);
             e->line_count++;
 
-            // redraw original line
-            term_cursor_left(e->output_fd, 999);
+            // redraw first part of the split
+            term_cursor_pos_set_x(e->output_fd, 0);
             term_erase_line_after(e->output_fd);
             term_screen_write(e->output_fd, e->line->buf, e->line->size);
 
@@ -179,13 +236,9 @@ editor_run(struct editor* e)
             // scroll region down
             long cx, cy;
             term_cursor_pos_get(e->output_fd, e->input_fd, &cx, &cy);
-            term_cursor_save(e->output_fd);
-            term_scroll_region_set(e->output_fd, cy, e->width - 2);
-            term_cursor_up(e->output_fd, 1, true);
-            term_scroll_region_set(e->output_fd, 0, e->width - 2);
-            term_cursor_restore(e->output_fd);
+            term_scroll_region_down(e, cy, e->height - 2, 1);
 
-            // draw the split line
+            // draw second part of the split
             term_screen_write(e->output_fd, e->line->buf, e->line->size);
             term_cursor_left(e->output_fd, e->line->size);
 
@@ -195,12 +248,13 @@ editor_run(struct editor* e)
         case KEY_BACKSPACE: {
             // middle of a line
             if (e->line_pos > 0) {
+                term_cursor_left(e->output_fd, 1);
                 e->line_pos--;
                 e->line_affinity--;
                 line_delete(e->line, e->line_pos);
-                term_cursor_left(e->output_fd, 1);
+
                 term_cursor_save(e->output_fd);
-                term_cursor_left(e->output_fd, 999);
+                term_cursor_pos_set_x(e->output_fd, 0);
                 term_erase_line_after(e->output_fd);
                 term_screen_write(e->output_fd, e->line->buf, e->line->size);
                 term_cursor_restore(e->output_fd);
@@ -211,7 +265,6 @@ editor_run(struct editor* e)
             if (e->line->prev == NULL) break;
 
             // start of any other line
-
             long prev_size = e->line->prev->size;
 
             // merge the two lines
@@ -224,23 +277,16 @@ editor_run(struct editor* e)
             // scroll region up
             long cx, cy;
             term_cursor_pos_get(e->output_fd, e->input_fd, &cx, &cy);
-            term_cursor_save(e->output_fd);
-            term_scroll_region_set(e->output_fd, cy, e->width - 2);
-            term_cursor_down(e->output_fd, 999, false);
-            term_cursor_down(e->output_fd, 1, true);
-            // TODO: draw the new line that scrolled in ELSE clear
-            term_scroll_region_set(e->output_fd, 0, e->width - 2);
-            term_cursor_restore(e->output_fd);
+            term_scroll_region_up(e, cy, e->height - 2, 1);
 
             // redraw merged line
             term_cursor_up(e->output_fd, 1, true);
-            term_cursor_left(e->output_fd, 999);
+            term_cursor_pos_set_x(e->output_fd, 0);
             term_erase_line_after(e->output_fd);
             term_screen_write(e->output_fd, e->line->buf, e->line->size);
 
             // set cursor to merge position
-            term_cursor_left(e->output_fd, 999);
-            term_cursor_right(e->output_fd, prev_size);
+            term_cursor_pos_set_x(e->output_fd, prev_size);
         }   break;
         default:
             if (c < 32 || c > 126) break;

@@ -11,6 +11,7 @@
 #include "line.h"
 #include "term.h"
 
+// TODO horiz scroll for individual lines ala uemacs
 // TODO delete key
 // TODO tabs
 // TODO write back real file
