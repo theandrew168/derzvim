@@ -50,6 +50,18 @@ term_scroll_region_down(struct editor* e, long top, long bottom, long n)
     term_cursor_restore(e->output_fd);
 }
 
+static void
+editor_draw_line(struct editor* e, const struct line* line)
+{
+    if (line->size >= e->width) {
+        char eol = '$';
+        term_screen_write(e->output_fd, line->buf, e->width - 1);
+        term_screen_write(e->output_fd, &eol, 1);
+    } else {
+        term_screen_write(e->output_fd, line->buf, line->size);
+    }
+}
+
 int
 editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
 {
@@ -105,7 +117,8 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     long count = 0;
     for (struct line* line = e->head; line != NULL; line = line->next) {
         if (count >= e->height - 2) break;
-        term_screen_write(e->output_fd, line->buf, line->size);
+        editor_draw_line(e, line);
+//        term_screen_write(e->output_fd, line->buf, line->size);
         term_cursor_next_line(e->output_fd);
         count++;
     }
@@ -202,7 +215,9 @@ editor_run(struct editor* e)
             e->line_affinity = e->line_pos;
             break;
         case KEY_ARROW_RIGHT:
+            // if at end of line, done
             if (e->line_pos >= e->line->size) break;
+            // if not at EOL but at end of screen, offset the line by screen width and draw $ at 0
             term_cursor_right(e->output_fd, 1);
             e->line_pos++;
             e->line_affinity = e->line_pos;
@@ -283,7 +298,8 @@ editor_run(struct editor* e)
             term_cursor_up(e->output_fd, 1, true);
             term_cursor_pos_set_x(e->output_fd, 0);
             term_erase_line_after(e->output_fd);
-            term_screen_write(e->output_fd, e->line->buf, e->line->size);
+            editor_draw_line(e, e->line);
+//            term_screen_write(e->output_fd, e->line->buf, e->line->size);
 
             // set cursor to merge position
             term_cursor_pos_set_x(e->output_fd, prev_size);
