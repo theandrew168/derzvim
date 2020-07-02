@@ -38,6 +38,7 @@ bool term_cursor_up(int output_fd, long n, bool scroll);
 bool term_cursor_down(int output_fd, long n, bool scroll);
 bool term_cursor_right(int output_fd, long n);
 bool term_cursor_left(int output_fd, long n);
+bool term_cursor_pos_get(int output_fd, int input_fd, long* cx, long* cy);
 bool term_cursor_pos_set(int output_fd, long cx, long cy);
 bool term_cursor_pos_home(int output_fd);
 bool term_cursor_next_line(int output_fd);

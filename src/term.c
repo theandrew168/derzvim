@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -27,6 +28,7 @@
 #define TERM_CURSOR_DOWN        "\033[%ldB"
 #define TERM_CURSOR_RIGHT       "\033[%ldC"
 #define TERM_CURSOR_LEFT        "\033[%ldD"
+#define TERM_CURSOR_POS_GET     "\033[6n"
 #define TERM_CURSOR_POS_SET     "\033[%ld;%ldH"
 #define TERM_CURSOR_POS_HOME    "\033[H"
 #define TERM_CURSOR_DOWN_SCROLL "\033D"
@@ -144,7 +146,7 @@ bool
 term_scroll_region_set(int output_fd, long top, long bottom)
 {
     char buf[80] = { 0 };
-    long size = snprintf(buf, sizeof(buf), TERM_SCROLL_REGION_SET, top, bottom);
+    long size = snprintf(buf, sizeof(buf), TERM_SCROLL_REGION_SET, top + 1, bottom + 1);
     if (write(output_fd, buf, size) != size) return false;
     return true;
 }
@@ -168,6 +170,8 @@ term_scroll_region_off(int output_fd)
 bool
 term_cursor_up(int output_fd, long n, bool scroll)
 {
+    if (n <= 0) return true;
+
     if (scroll) {
         // TODO: do the move + scroll ops support a count?
         for (long i = 0; i < n; i++) {
@@ -185,6 +189,8 @@ term_cursor_up(int output_fd, long n, bool scroll)
 bool
 term_cursor_down(int output_fd, long n, bool scroll)
 {
+    if (n <= 0) return true;
+
     if (scroll) {
         // TODO: do the move + scroll ops support a count?
         for (long i = 0; i < n; i++) {
@@ -202,6 +208,8 @@ term_cursor_down(int output_fd, long n, bool scroll)
 bool
 term_cursor_right(int output_fd, long n)
 {
+    if (n <= 0) return true;
+
     char buf[80] = { 0 };
     long size = snprintf(buf, sizeof(buf), TERM_CURSOR_RIGHT, n);
     if (write(output_fd, buf, size) != size) return false;
@@ -211,9 +219,43 @@ term_cursor_right(int output_fd, long n)
 bool
 term_cursor_left(int output_fd, long n)
 {
+    if (n <= 0) return true;
+
     char buf[80] = { 0 };
     long size = snprintf(buf, sizeof(buf), TERM_CURSOR_LEFT, n);
     if (write(output_fd, buf, size) != size) return false;
+    return true;
+}
+
+bool
+term_cursor_pos_get(int output_fd, int input_fd, long* cx, long* cy)
+{
+    assert(cx != NULL);
+    assert(cy != NULL);
+
+    // send an escape sequence to output_fd and then
+    // read an escape sequence back on input_fd
+
+    long size = strlen(TERM_CURSOR_POS_GET);
+    if (write(output_fd, TERM_CURSOR_POS_GET, size) != size) return false;
+
+    char buf[32] = { 0 };
+    unsigned long i = 0;
+    while (i < sizeof(buf) - 1) {
+        if (read(input_fd, &buf[i], 1) != 1) break;
+        if (buf[i] == 'R') break;
+        i++;
+    }
+    buf[i] = '\0';
+
+    // parse the cursor pos from the resulting escape sequence
+    if (buf[0] != KEY_ESCAPE || buf[1] != '[') return false;
+    if (sscanf(&buf[2], "%ld;%ld", cy, cx) != 2) return false;
+
+    // derzvim uses 0-based indexing; termios stuff uses 1-based
+    *cx -= 1;
+    *cy -= 1;
+
     return true;
 }
 
