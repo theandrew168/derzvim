@@ -122,7 +122,6 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
     for (struct line* line = e->head; line != NULL; line = line->next) {
         if (count >= e->height - 2) break;
         editor_draw_line(e, line);
-//        term_screen_write(e->output_fd, line->buf, line->size);
         term_cursor_next_line(e->output_fd);
         count++;
     }
@@ -194,28 +193,53 @@ editor_run(struct editor* e)
             return false;
         case KEY_ARROW_UP:
             if (e->line->prev == NULL) break;
+
+            // unscroll and rewdraw current line if necessary
+            if (e->line_pos / e->width > 0) {
+                e->line_pos = 0;
+                term_cursor_pos_set_x(e->output_fd, 0);
+                term_erase_line_after(e->output_fd);
+                editor_draw_line(e, e->line);
+            }
+
             term_cursor_up(e->output_fd, 1, true);
             e->line = e->line->prev;
             e->line_index--;
 
             // account for line affinity
             e->line_pos = MIN(e->line->size, e->line_affinity);
-            term_cursor_left(e->output_fd, 999);
-            term_cursor_right(e->output_fd, e->line_pos);
+            if (e->line_pos / e->width > 0) {
+                term_cursor_pos_set_x(e->output_fd, 0);
+                term_erase_line_after(e->output_fd);
+                editor_draw_line(e, e->line);
+            }
+            term_cursor_pos_set_x(e->output_fd, e->line_pos % e->width);
             break;
         case KEY_ARROW_DOWN:
             if (e->line->next == NULL) break;
+
+            // unscroll and rewdraw current line if necessary
+            if (e->line_pos / e->width > 0) {
+                e->line_pos = 0;
+                term_cursor_pos_set_x(e->output_fd, 0);
+                term_erase_line_after(e->output_fd);
+                editor_draw_line(e, e->line);
+            }
+
             term_cursor_down(e->output_fd, 1, true);
             e->line = e->line->next;
             e->line_index++;
 
             // account for line affinity
             e->line_pos = MIN(e->line->size, e->line_affinity);
-            term_cursor_left(e->output_fd, 999);
-            term_cursor_right(e->output_fd, e->line_pos);
+            if (e->line_pos / e->width > 0) {
+                term_cursor_pos_set_x(e->output_fd, 0);
+                term_erase_line_after(e->output_fd);
+                editor_draw_line(e, e->line);
+            }
+            term_cursor_pos_set_x(e->output_fd, e->line_pos % e->width);
             break;
         case KEY_ARROW_LEFT:
-            // if at start of line, done
             if (e->line_pos <= 0) break;
 
             e->line_pos--;
@@ -232,7 +256,6 @@ editor_run(struct editor* e)
             }
             break;
         case KEY_ARROW_RIGHT:
-            // if at end of line, done
             if (e->line_pos >= e->line->size) break;
 
             e->line_pos++;
@@ -245,22 +268,21 @@ editor_run(struct editor* e)
                 editor_draw_line(e, e->line);
                 term_cursor_pos_set_x(e->output_fd, 0);
             } else {
-                // if not at edge of screen, simply move the cursor to the right
                 term_cursor_right(e->output_fd, 1);
             }
             break;
-        case KEY_HOME:
-            e->line_pos = 0;
-            e->line_affinity = 0;
-            term_cursor_pos_set_x(e->output_fd, 0);
-            break;
-        case KEY_END:
-            // TODO: horiz scroll
-            e->line_pos = e->line->size;
-            e->line_affinity = e->line->size;
-            term_cursor_pos_set_x(e->output_fd, e->line_pos);
-            break;
+//        case KEY_HOME:
+//            e->line_pos = 0;
+//            e->line_affinity = 0;
+//            term_cursor_pos_set_x(e->output_fd, 0);
+//            break;
+//        case KEY_END:
+//            e->line_pos = e->line->size;
+//            e->line_affinity = e->line->size;
+//            term_cursor_pos_set_x(e->output_fd, e->line_pos);
+//            break;
         case KEY_ENTER: {
+            // TODO: broken
             // break the current line
             line_break(e->line, e->line_pos);
             e->line_count++;
@@ -288,6 +310,7 @@ editor_run(struct editor* e)
             e->line_pos = 0;
         }   break;
         case KEY_BACKSPACE: {
+            // TODO: broken
             // middle of a line
             if (e->line_pos > 0) {
                 term_cursor_left(e->output_fd, 1);
@@ -331,6 +354,7 @@ editor_run(struct editor* e)
             term_cursor_pos_set_x(e->output_fd, prev_size);
         }   break;
         default:
+            // TODO: broken
             if (c < 32 || c > 126) break;
             line_insert(e->line, e->line_pos, c);
             e->line_pos++;
@@ -348,70 +372,3 @@ editor_run(struct editor* e)
 
     return true;
 }
-
-//int
-//editor_rune_delete(struct editor* e)
-//{
-//    assert(e != NULL);
-//
-//    if (e->line_pos == 0 && e->line->prev != NULL) {
-//        struct line* prev = e->line->prev;
-//
-//        // move cursor and line values to prev line
-//        e->line_pos = prev->size;
-//        e->line_affinity = prev->size;
-//
-//        // horizontal scrolling?
-//        if (e->line_pos >= e->width) {
-//            e->scroll_x = e->line_pos - (e->width / 2);
-//        }
-//        e->cursor_x = prev->size - e->scroll_x;
-//
-//        // move back a line and merge the two
-//        e->line = e->line->prev;
-//        line_merge(e->line, e->line->next);
-//
-//        e->line_index--;
-//        e->line_count--;
-//
-//        // vertical scrolling
-//        if (e->cursor_y <= 0) {
-//            e->scroll_y--;
-//        } else {
-//            e->cursor_y--;
-//        }
-//    } else if (e->cursor_x > 0) {
-//        editor_cursor_left(e);
-//        line_delete(e->line, e->line_pos);
-//    }
-//
-//    return EDITOR_OK;
-//}
-//int
-//editor_cursor_home(struct editor* e)
-//{
-//    assert(e != NULL);
-//
-//    e->scroll_x = 0;
-//    e->cursor_x = 0;
-//    e->line_pos = 0;
-//    e->line_affinity = 0;
-//
-//    return EDITOR_OK;
-//}
-//
-//int
-//editor_cursor_end(struct editor* e)
-//{
-//    assert(e != NULL);
-//
-//    long size = e->line->size;
-//    if (size >= e->width) {
-//        e->scroll_x = size - e->width + 1;
-//    }
-//    e->cursor_x = MIN(size, e->width - 1);
-//    e->line_pos = size;
-//    e->line_affinity = size;
-//
-//    return EDITOR_OK;
-//}
