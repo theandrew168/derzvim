@@ -15,6 +15,8 @@
 // TODO delete key
 // TODO tabs
 // TODO write back real file
+// TODO use FILE* instead of linux fds (use fileno() to get fd for ioctl stuff)
+// TODO abstract the termios save / restore stuff behind a typedef?
 
 int
 main(int argc, char* argv[])
