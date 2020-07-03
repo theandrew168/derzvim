@@ -50,18 +50,20 @@ term_scroll_region_down(struct editor* e, long top, long bottom, long n)
     term_cursor_restore(e->output_fd);
 }
 
-// TODO: can more of the left and right overflow $ logic be done here?
-// maybe even both ends of it? might require an extra bit of e->line_scroll state?
 static void
 editor_draw_line(struct editor* e, const struct line* line)
 {
-    if (line->size > e->width) {
-        char eol = '$';
-        term_screen_write(e->output_fd, line->buf, e->width - 1);
-        term_screen_write(e->output_fd, &eol, 1);
-    } else {
+    long occupation = e->line->size / e->width + 1;
+
+    // line only occupies a single row, print and return
+    if (occupation == 1) {
         term_screen_write(e->output_fd, line->buf, line->size);
+        return;
     }
+
+    long scroll = e->line_pos / e->width;
+    long offset = scroll * e->width;
+    term_screen_write(e->output_fd, line->buf + offset, e->width);
 }
 
 int
@@ -159,10 +161,12 @@ draw_status_bar(struct editor* e)
     // draw the status message
     char status[128] = { 0 };
     snprintf(status, sizeof(status),
-        "-- lp: %3ld | ls: %3ld | la: %3ld --",
+        "-- lp: %3ld | ls: %3ld | la: %3ld | scr: %3ld | occ: %3ld --",
         e->line_pos,
         e->line->size,
-        e->line_affinity);
+        e->line_affinity,
+        e->line_pos / e->width,
+        (e->line->size / e->width) + 1);
     term_cursor_pos_set(e->output_fd, 1, e->height - 1);
     term_screen_write(e->output_fd, status, strlen(status));
 
@@ -218,14 +222,11 @@ editor_run(struct editor* e)
             e->line_affinity = e->line_pos;
 
             // scroll line left if we hit the left edge
-            if (e->line_pos > 0 && e->line_pos % (e->width - 2) == 0) {
-                long scroll = (e->line_pos / e->width);
+            if (e->line_pos % e->width == e->width - 1) {
                 term_cursor_pos_set_x(e->output_fd, 0);
                 term_erase_line_after(e->output_fd);
-                // TODO draw left $ if scroll > 0
                 editor_draw_line(e, e->line);
-                //term_screen_write(e->output_fd, e->line->buf + (e->width * scroll) - 1, e->width - 1);
-                term_cursor_pos_set_x(e->output_fd, e->width - 2);
+                term_cursor_pos_set_x(e->output_fd, e->width - 1);
             } else {
                 term_cursor_left(e->output_fd, 1);
             }
@@ -237,17 +238,12 @@ editor_run(struct editor* e)
             e->line_pos++;
             e->line_affinity = e->line_pos;
 
-            // TODO: overlap 5 chars after the scroll like uemacs
             // scroll line right if we hit the right edge
-            if (e->line_pos % (e->width - 1) == 0) {
-                long scroll = (e->line_pos / e->width) + 1;
+            if (e->line_pos % e->width == 0) {
                 term_cursor_pos_set_x(e->output_fd, 0);
                 term_erase_line_after(e->output_fd);
-                // TODO check for and draw right $ as well
-                char dol = '$';
-                term_screen_write(e->output_fd, &dol, 1);
-                term_screen_write(e->output_fd, e->line->buf + (e->width * scroll) - 1, e->width - 1);
-                term_cursor_pos_set_x(e->output_fd, 1);
+                editor_draw_line(e, e->line);
+                term_cursor_pos_set_x(e->output_fd, 0);
             } else {
                 // if not at edge of screen, simply move the cursor to the right
                 term_cursor_right(e->output_fd, 1);
