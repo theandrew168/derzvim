@@ -92,8 +92,8 @@ editor_draw(const struct editor* e)
 
     // TODO optimize this to not redraw everything upon every key input
     // thats probs too slow. its def inefficient
-    term_screen_clear(e->output_fd);
-    term_cursor_reset(e->output_fd);
+    term_erase_screen(e->output_fd);
+    term_cursor_pos_set(e->output_fd, 0, 0);
     term_cursor_hide(e->output_fd);
 
     // this is our iterator
@@ -105,8 +105,8 @@ editor_draw(const struct editor* e)
     // draw the text lines
     for (long i = 0; i < e->height - 1; i++) {
         if (line == NULL) break;
-        term_cursor_set(e->output_fd, 0, i);
-        term_screen_write(e->output_fd,
+        term_cursor_pos_set(e->output_fd, 0, i);
+        term_write(e->output_fd,
             line->buf + e->scroll_x,
             MIN(line->size - e->scroll_x, e->width));
         line = line->next;
@@ -123,17 +123,17 @@ editor_draw(const struct editor* e)
         e->line_affinity,
         e->scroll_x,
         e->scroll_y);
-    term_cursor_set(e->output_fd, 1, e->height - 1);
-    term_screen_write(e->output_fd, status, strlen(status));
+    term_cursor_pos_set(e->output_fd, 1, e->height - 1);
+    term_write(e->output_fd, status, strlen(status));
 
     // draw the cursor pos indicator
     char curpos[64] = { 0 };
     long curpos_size = snprintf(curpos, sizeof(curpos),
         "%8ld,%-8ld", e->line_index + 1, e->line_pos + 1);
-    term_cursor_set(e->output_fd, e->width - curpos_size - 1, e->height - 1);
-    term_screen_write(e->output_fd, curpos, strlen(curpos));
+    term_cursor_pos_set(e->output_fd, e->width - curpos_size - 1, e->height - 1);
+    term_write(e->output_fd, curpos, strlen(curpos));
 
-    term_cursor_set(e->output_fd, e->cursor_x, e->cursor_y);
+    term_cursor_pos_set(e->output_fd, e->cursor_x, e->cursor_y);
     term_cursor_show(e->output_fd);
 
     return EDITOR_OK;

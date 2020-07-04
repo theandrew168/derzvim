@@ -10,8 +10,6 @@
 // typedef (*mode_handler)(struct editor* e, int c);
 // or use more specific handler for different things?
 // I think the first would scale better and be less restrictive
-// TODO: impl a simple status bar (just use the last row)
-// use it for messages and cursor pos thing like vim
 struct editor {
     struct termios original_termios;
 
