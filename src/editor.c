@@ -18,6 +18,8 @@ editor_init(struct editor* e, int input_fd, int output_fd, const char* path)
 {
     assert(e != NULL);
 
+    e->file_path = path;
+
     e->input_fd = input_fd;
     e->output_fd = output_fd;
 
@@ -76,8 +78,8 @@ editor_free(struct editor* e)
     term_screen_restore(e->output_fd);
     term_cursor_restore(e->output_fd);
 
-    // write the output.txt file
-    lines_write(e->head, "output.txt");
+    // write the changes
+    lines_write(e->head, e->file_path);
 
     // free the DLL of lines
     lines_free(&e->head, &e->tail);

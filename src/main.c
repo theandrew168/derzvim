@@ -13,7 +13,6 @@
 
 // TODO delete key
 // TODO tabs
-// TODO write back real file
 
 int
 main(int argc, char* argv[])

@@ -12,6 +12,7 @@
 // I think the first would scale better and be less restrictive
 struct editor {
     struct termios original_termios;
+    const char* file_path;
 
     long input_fd;
     long output_fd;
